@@ -130,9 +130,11 @@ Production-grade token management:
 
 ## Phase 1: MCP Server Implementation
 
-### 1.1 Project Setup
+### 1.1 Project Setup ✅ IMPLEMENTED
 
-**Technology Stack**: Spring Boot 3.x + Spring AI MCP Server Starter
+**Technology Stack**: Spring Boot 3.5.9 + Spring AI 1.1.2 MCP Server WebFlux
+
+**Location**: `hub-mcp/`
 
 **Why Spring AI?**
 - Native integration with Spring ecosystem
@@ -141,141 +143,152 @@ Production-grade token management:
 - Consistent with Tanzu/VMware technology stack
 - Easy integration with GraphQL clients
 
-**Directory Structure**:
+**Implemented Directory Structure**:
 ```
-tanzu-mcp-server/
-â”œâ”€â”€ src/
-â”‚   â”œâ”€â”€ main/
-â”‚   â”‚   â”œâ”€â”€ java/
-â”‚   â”‚   â”‚   â””â”€â”€ com/
-â”‚   â”‚   â”‚       â””â”€â”€ tanzu/
-â”‚   â”‚   â”‚           â””â”€â”€ mcp/
-â”‚   â”‚   â”‚               â”œâ”€â”€ TanzuMcpServerApplication.java
-â”‚   â”‚   â”‚               â”œâ”€â”€ config/
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ McpServerConfig.java
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ GraphQLClientConfig.java
-â”‚   â”‚   â”‚               â”‚   â””â”€â”€ SecurityConfig.java
-â”‚   â”‚   â”‚               â”œâ”€â”€ service/
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ TanzuGraphQLService.java
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ SchemaIntrospectionService.java
-â”‚   â”‚   â”‚               â”‚   â””â”€â”€ QueryBuilderService.java
-â”‚   â”‚   â”‚               â”œâ”€â”€ tools/
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ TanzuQueryTool.java
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ TanzuMutateTool.java
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ TanzuExploreSchemaTool.java
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ TanzuFindEntityPathTool.java
-â”‚   â”‚   â”‚               â”‚   â””â”€â”€ TanzuCommonQueriesTool.java
-â”‚   â”‚   â”‚               â”œâ”€â”€ model/
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ GraphQLRequest.java
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ GraphQLResponse.java
-â”‚   â”‚   â”‚               â”‚   â”œâ”€â”€ SchemaCache.java
-â”‚   â”‚   â”‚               â”‚   â””â”€â”€ EntityRelationship.java
-â”‚   â”‚   â”‚               â””â”€â”€ exception/
-â”‚   â”‚   â”‚                   â”œâ”€â”€ GraphQLException.java
-â”‚   â”‚   â”‚                   â””â”€â”€ SchemaValidationException.java
-â”‚   â”‚   â””â”€â”€ resources/
-â”‚   â”‚       â”œâ”€â”€ application.yml
-â”‚   â”‚       â”œâ”€â”€ application-dev.yml
-â”‚   â”‚       â””â”€â”€ schema-cache/
-â”‚   â””â”€â”€ test/
-â”‚       â”œâ”€â”€ java/
-â”‚       â”‚   â””â”€â”€ com/
-â”‚       â”‚       â””â”€â”€ tanzu/
-â”‚       â”‚           â””â”€â”€ mcp/
-â”‚       â”‚               â”œâ”€â”€ tools/
-â”‚       â”‚               â””â”€â”€ service/
-â”‚       â””â”€â”€ resources/
-â”‚           â””â”€â”€ fixtures/
-â”œâ”€â”€ pom.xml
-â”œâ”€â”€ README.md
-â””â”€â”€ .env.example
+hub-mcp/
+├── src/
+│   ├── main/
+│   │   ├── java/
+│   │   │   └── org/
+│   │   │       └── tanzu/
+│   │   │           └── hubmcp/
+│   │   │               ├── HubMcpApplication.java
+│   │   │               ├── config/
+│   │   │               │   ├── TanzuPlatformProperties.java  # Type-safe config record
+│   │   │               │   ├── CacheConfig.java              # Caffeine cache setup
+│   │   │               │   └── GraphQLClientConfig.java      # WebClient configuration
+│   │   │               ├── service/
+│   │   │               │   └── package-info.java             # Placeholder for services
+│   │   │               ├── tools/
+│   │   │               │   └── package-info.java             # Placeholder for MCP tools
+│   │   │               ├── model/
+│   │   │               │   ├── GraphQLRequest.java           # Request record with builder
+│   │   │               │   ├── GraphQLResponse.java          # Response record
+│   │   │               │   ├── GraphQLError.java             # Error with location
+│   │   │               │   ├── SchemaCache.java              # Cached schema container
+│   │   │               │   ├── TypeDefinition.java           # GraphQL type definition
+│   │   │               │   ├── FieldDefinition.java          # Field within a type
+│   │   │               │   ├── TypeReference.java            # Type reference with unwrapping
+│   │   │               │   ├── InputValue.java               # Input argument definition
+│   │   │               │   ├── EnumValue.java                # Enum value definition
+│   │   │               │   └── EntityRelationship.java       # Entity relationship metadata
+│   │   │               └── exception/
+│   │   │                   ├── GraphQLException.java         # GraphQL operation errors
+│   │   │                   ├── SchemaValidationException.java # Validation errors
+│   │   │                   └── GlobalExceptionHandler.java   # REST exception handler
+│   │   └── resources/
+│   │       ├── application.yml
+│   │       └── application-dev.yml
+│   └── test/
+│       └── java/
+│           └── org/
+│               └── tanzu/
+│                   └── hubmcp/
+│                       └── HubMcpApplicationTests.java
+├── pom.xml
+├── mvnw
+└── mvnw.cmd
 ```
 
-**Dependencies (pom.xml)**:
+**Dependencies (pom.xml)** - Implemented:
 ```xml
+<properties>
+    <java.version>21</java.version>
+    <spring-ai.version>1.1.2</spring-ai.version>
+</properties>
+
 <dependencies>
-    <!-- Spring Boot -->
+    <!-- Spring Boot Core -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-web</artifactId>
+        <artifactId>spring-boot-starter-actuator</artifactId>
     </dependency>
-    
-    <!-- Spring AI MCP Server -->
-    <dependency>
-        <groupId>org.springframework.ai</groupId>
-        <artifactId>spring-ai-mcp-server-spring-boot-starter</artifactId>
-        <version>1.0.0</version>
-    </dependency>
-    
-    <!-- GraphQL Client -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-graphql</artifactId>
     </dependency>
-    
+    <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-webflux</artifactId>
     </dependency>
-    
+
+    <!-- Spring AI MCP Server -->
+    <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-starter-mcp-server-webflux</artifactId>
+    </dependency>
+
     <!-- Caching -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-cache</artifactId>
     </dependency>
-    
     <dependency>
         <groupId>com.github.ben-manes.caffeine</groupId>
         <artifactId>caffeine</artifactId>
     </dependency>
-    
+
     <!-- Validation -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-validation</artifactId>
     </dependency>
-    
+
     <!-- Configuration Properties -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-configuration-processor</artifactId>
         <optional>true</optional>
     </dependency>
-    
-    <!-- Actuator for monitoring -->
-    <dependency>
-        <groupId>org.springframework.boot</groupId>
-        <artifactId>spring-boot-starter-actuator</artifactId>
-    </dependency>
-    
+
     <!-- Testing -->
     <dependency>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-test</artifactId>
         <scope>test</scope>
     </dependency>
-    
     <dependency>
         <groupId>io.projectreactor</groupId>
         <artifactId>reactor-test</artifactId>
         <scope>test</scope>
     </dependency>
+    <dependency>
+        <groupId>org.springframework.graphql</groupId>
+        <artifactId>spring-graphql-test</artifactId>
+        <scope>test</scope>
+    </dependency>
 </dependencies>
+
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.ai</groupId>
+            <artifactId>spring-ai-bom</artifactId>
+            <version>${spring-ai.version}</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
 ```
 
-**Application Configuration (application.yml)**:
+**Application Configuration (application.yml)** - Implemented:
 ```yaml
 spring:
   application:
-    name: tanzu-mcp-server
-  
+    name: hub-mcp
+
   ai:
     mcp:
       server:
-        transport: STREAMABLE_HTTP
-        port: 8080
-        base-path: /mcp
-        
+        name: tanzu-platform-mcp
+        version: 1.0.0
+        sse-message-endpoint: /mcp/messages
+
 tanzu:
   platform:
     url: ${TANZU_PLATFORM_URL:https://tanzu-hub.kuhn-labs.com}
@@ -284,26 +297,56 @@ tanzu:
       endpoint: /hub/graphql
       timeout: 30s
       max-retries: 3
-  
+
   cache:
     schema:
       ttl: 24h
       max-size: 100
-      
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,mcp
+        include: health,info,metrics,caches
   endpoint:
     health:
       show-details: always
-      
+
 logging:
   level:
-    com.tanzu.mcp: DEBUG
+    org.tanzu.hubmcp: DEBUG
     org.springframework.ai.mcp: DEBUG
 ```
+
+**Type-Safe Configuration Properties (TanzuPlatformProperties.java)** - Implemented:
+```java
+@ConfigurationProperties(prefix = "tanzu.platform")
+@Validated
+public record TanzuPlatformProperties(
+        @NotBlank String url,
+        @NotBlank String token,
+        GraphQLProperties graphql,
+        CacheProperties cache
+) {
+    public record GraphQLProperties(
+            String endpoint,
+            Duration timeout,
+            int maxRetries
+    ) {}
+
+    public record CacheProperties(SchemaProperties schema) {}
+
+    public record SchemaProperties(Duration ttl, int maxSize) {}
+}
+```
+
+**Key Implementation Details**:
+- Uses Java 21 with modern record types for all model classes
+- Spring AI BOM 1.1.2 for dependency management
+- WebClient configured with 16MB buffer for large schema responses
+- Caffeine cache with configurable TTL (default 24 hours)
+- Global exception handler with structured error responses
+
 
 ### 1.2 Core MCP Tools (Spring AI Implementation)
 

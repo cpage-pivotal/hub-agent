@@ -1,0 +1,39 @@
+spring:
+  application:
+    name: hub-mcp
+
+  ai:
+    mcp:
+      server:
+        name: tanzu-platform-mcp
+        version: 1.0.0
+        sse-message-endpoint: /mcp/messages
+
+tanzu:
+  platform:
+    url: ${TANZU_PLATFORM_URL:https://tanzu-hub.kuhn-labs.com}
+    token: ${TOKEN:}
+    graphql:
+      endpoint: /hub/graphql
+      timeout: 30s
+      max-retries: 3
+
+  cache:
+    schema:
+      ttl: 24h
+      max-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,caches
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    org.tanzu.hubmcp: DEBUG
+    org.springframework.ai.mcp: DEBUG
+

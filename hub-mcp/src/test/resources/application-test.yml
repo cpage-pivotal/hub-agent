@@ -1,0 +1,17 @@
+spring:
+  application:
+    name: hub-mcp-test
+
+tanzu:
+  platform:
+    url: https://test.example.com
+    token: test-token
+    graphql:
+      endpoint: /hub/graphql
+      timeout: 30s
+      max-retries: 3
+    cache:
+      schema:
+        ttl: 1h
+        max-size: 10
+
