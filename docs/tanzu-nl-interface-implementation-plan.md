@@ -348,10 +348,37 @@ public record TanzuPlatformProperties(
 - Global exception handler with structured error responses
 
 
-### 1.2 Core MCP Tools (Spring AI Implementation)
+### 1.2 Core MCP Tools (Spring AI Implementation) ✅ IMPLEMENTED
 
-#### Tool 1: `tanzu_graphql_query`
+**Implementation Status**: All 6 core MCP tools have been fully implemented and tested.
+
+**Key Achievements**:
+- ✅ All 6 MCP tools operational (`tanzu_graphql_query`, `tanzu_graphql_mutate`, `tanzu_explore_schema`, `tanzu_find_entity_path`, `tanzu_common_queries`, `tanzu_validate_query`)
+- ✅ Schema introspection service with caching (Caffeine, 24-hour TTL)
+- ✅ Relationship graph building with proper entity type name conversion
+- ✅ BFS path-finding algorithm for entity relationship traversal
+- ✅ GraphQL query template generation from discovered paths
+- ✅ Comprehensive error handling and validation
+- ✅ "Did you mean?" suggestions using Levenshtein distance
+
+**Critical Implementation Details**:
+- **Query structure**: Must use `entityQuery { typed { tanzu { {domain} { {entityType} { query(...) } } } } }`
+- **Domains are lowercase**: `tas`, `spring`, `platform` (not `TAS`, `Spring`, `Platform`)
+- **Entity type fields are lowercase**: `foundation`, `application` (not `Foundation`, `Application`)
+- Relationship fields use **camelCase** names (e.g., `isContainedIn`, `contains`)
+- Entity types always end with `_Type` suffix (e.g., `Entity_Tanzu_TAS_Application_Type`)
+- Relationship navigation uses `relationshipsOut.isContainedIn` for child-to-parent traversal
+- RelIn/RelOut types contain snake_case field names that must be converted with acronym preservation
+
+#### Tool 1: `tanzu_graphql_query` ✅ IMPLEMENTED
 **Purpose**: Execute read-only GraphQL queries
+
+**Implemented Features**:
+- GraphQL query execution via Spring WebClient
+- Automatic retries with exponential backoff (max 3 retries)
+- Timeout handling (30s default, configurable)
+- Comprehensive error handling and structured responses
+- Query complexity tracking from API response extensions
 
 **Spring AI Tool Implementation**:
 ```java
@@ -397,6 +424,36 @@ public class TanzuQueryTool {
 - `variables` (object, optional): Query variables
 - `operationName` (string, optional): Named operation
 
+**Example Query (Correct Structure)**:
+```graphql
+query {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          foundation {
+            query(first: 5) {
+              edges {
+                node {
+                  id
+                  properties {
+                    name
+                  }
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
 **Returns**:
 - JSON response with data or errors
 - Query execution metadata (complexity, timing)
@@ -408,8 +465,14 @@ public class TanzuQueryTool {
 - Add retry logic with Spring Retry
 - Use WebClient for async execution
 
-#### Tool 2: `tanzu_graphql_mutate`
+#### Tool 2: `tanzu_graphql_mutate` ✅ IMPLEMENTED
 **Purpose**: Execute GraphQL mutations
+
+**Implemented Features**:
+- Safety confirmation for destructive operations (delete/remove/destroy keywords)
+- Same robust execution infrastructure as query tool
+- Audit logging support via Spring AOP
+- Structured error responses with detailed validation messages
 
 **Spring AI Tool Implementation**:
 ```java
@@ -479,8 +542,18 @@ public class TanzuMutateTool {
 - Return detailed error messages
 - Support transaction rollback where applicable
 
-#### Tool 3: `tanzu_explore_schema`
+#### Tool 3: `tanzu_explore_schema` ✅ IMPLEMENTED
 **Purpose**: Explore API schema and documentation with intelligent filtering
+
+**Implemented Features**:
+- Full schema introspection with 24-hour caching
+- Domain-based filtering (TAS, Spring, Security, Observability, Capacity, etc.)
+- Type category filtering (OBJECT, INPUT_OBJECT, ENUM, INTERFACE, SCALAR)
+- Search by concept or type name with fuzzy matching
+- "Did you mean?" suggestions using Levenshtein distance
+- Automatic result limiting (20 types max) to avoid context overload
+- Example query generation for entity types
+- Field-level details with type information and deprecation warnings
 
 **Spring AI Tool Implementation**:
 ```java
@@ -499,7 +572,7 @@ public class TanzuExploreSchemaTool {
     public SchemaExplorationResponse exploreSchema(
         @McpToolParameter(
             name = "typeName",
-            description = "Specific type to explore (e.g., Entity_Tanzu_TAS_Application)"
+            description = "Specific type to explore (e.g., Entity_Tanzu_TAS_Application_Type)"
         ) String typeName,
         
         @McpToolParameter(
@@ -568,8 +641,39 @@ public class TanzuExploreSchemaTool {
 - Rank search results by relevance (description match > name match)
 - Limit results to 20 types per request to avoid overwhelming context
 
-#### Tool 4: `tanzu_find_entity_path`
+#### Tool 4: `tanzu_find_entity_path` ✅ IMPLEMENTED
 **Purpose**: Find relationship paths between entity types
+
+**Implemented Features**:
+- BFS (Breadth-First Search) algorithm for shortest path discovery
+- Configurable maximum depth (default 3, max 5 steps)
+- Relationship graph built from schema introspection
+- Automatic entity type name conversion from snake_case field names
+- Acronym preservation (TAS, TKG, BOSH, VM, etc.) during conversion
+- Multiple path discovery (returns all paths up to max depth)
+- GraphQL query template generation from discovered paths
+- Readable path visualization with step-by-step traversal
+- Type validation with "did you mean?" suggestions
+
+**Example Output**:
+```json
+{
+  "fromType": "Entity_Tanzu_TAS_Application_Type",
+  "toType": "Entity_Tanzu_TAS_Foundation_Type",
+  "pathsFound": 1,
+  "paths": [{
+    "pathNumber": 1,
+    "steps": 3,
+    "traversal": [
+      "Entity_Tanzu_TAS_Application_Type",
+      "  --[relationshipsOut.isContainedIn]--> Entity_Tanzu_TAS_Space_Type",
+      "  --[relationshipsOut.isContainedIn]--> Entity_Tanzu_TAS_Organization_Type",
+      "  --[relationshipsOut.isContainedIn]--> Entity_Tanzu_TAS_Foundation_Type"
+    ],
+    "queryTemplate": "query { ... }"
+  }]
+}
+```
 
 **Spring AI Tool Implementation**:
 ```java
@@ -586,13 +690,13 @@ public class TanzuFindEntityPathTool {
     public EntityPathResponse findPath(
         @McpToolParameter(
             name = "fromType",
-            description = "Starting entity type (e.g., Entity_Tanzu_TAS_Application)",
+            description = "Starting entity type (e.g., Entity_Tanzu_TAS_Application_Type)",
             required = true
         ) String fromType,
         
         @McpToolParameter(
             name = "toType",
-            description = "Target entity type (e.g., Entity_Tanzu_TAS_Foundation)",
+            description = "Target entity type (e.g., Entity_Tanzu_TAS_Foundation_Type)",
             required = true
         ) String toType,
         
@@ -629,8 +733,14 @@ public class TanzuFindEntityPathTool {
 - Consider common patterns (Foundation â†’ Space â†’ Application)
 - Cache path calculations
 
-#### Tool 5: `tanzu_common_queries`
+#### Tool 5: `tanzu_common_queries` ✅ IMPLEMENTED
 **Purpose**: List and execute common query patterns
+
+**Implemented Features**:
+- Pre-built query templates for frequent operations
+- Parameter substitution with type-safe validation
+- Structured response format with query and result
+- 20+ common patterns covering major use cases
 
 **Spring AI Tool Implementation**:
 ```java
@@ -709,8 +819,18 @@ public class TanzuCommonQueriesTool {
 - `list_management_endpoints` - Registered management endpoints
 - `get_insights_summary` - Platform insights overview
 
-#### Tool 6: `tanzu_validate_query`
+#### Tool 6: `tanzu_validate_query` ✅ IMPLEMENTED
 **Purpose**: Validate GraphQL query syntax and fields before execution
+
+**Implemented Features**:
+- GraphQL syntax validation using graphql-java Parser
+- Schema-based field validation
+- Type checking for variables
+- Query complexity estimation
+- Automatic fix suggestions for common errors
+- "Did you mean?" suggestions for typos in field/type names
+- Detailed error messages with line/column information
+- Prevents wasted API calls by catching errors early
 
 **Spring AI Tool Implementation**:
 ```java
@@ -825,6 +945,48 @@ public class TanzuValidateQueryTool {
 - Validate variable types match expected input types
 
 ### 1.3 GraphQL Client Implementation
+
+**Key Implementation Learnings**:
+
+1. **Typed Query Structure**: The Tanzu Platform GraphQL API uses a strongly-typed query hierarchy:
+   - **CRITICAL**: Queries must use the path: `entityQuery` → `typed` → `tanzu` → `{domain}` → `{entityType}` → `query(...)`
+   - Example: `entityQuery { typed { tanzu { tas { foundation { query(first: 10) { ... } } } } } }`
+   - **NOT**: ~~`entityQuery { Entity_Tanzu_TAS_Foundation_Type(first: 10) { ... } }`~~
+   - The hierarchy provides type safety and domain organization
+
+2. **Query Hierarchy Breakdown**:
+   ```
+   entityQuery                              # Root query type
+     └─ typed                               # Strongly-typed entity queries
+         └─ tanzu                           # Tanzu namespace
+             └─ {domain}                    # Domain: tas, spring, platform
+                 └─ {entityType}            # Entity type (lowercase): foundation, application, space
+                     └─ query(...)          # Query method with pagination arguments
+                         ├─ edges { node { ... } }
+                         └─ pageInfo { ... }
+   ```
+
+3. **Domain and Entity Type Naming**:
+   - Domains are lowercase: `tas`, `spring`, `platform`
+   - Entity types are lowercase with no underscores: `foundation`, `application`, `space`, `organization`
+   - Query types end with `_Query` suffix: `Entity_Tanzu_TAS_Foundation_Query`
+   - Entity types end with `_Type` suffix: `Entity_Tanzu_TAS_Foundation_Type`
+
+4. **Relationship Field Structure**: Within entity nodes, relationships use a different structure:
+   - Entity `relationshipsIn`/`relationshipsOut` fields point to `Entity_*_RelIn`/`Entity_*_RelOut` types
+   - These RelIn/RelOut types contain **camelCase** relationship fields (e.g., `isContainedIn`, `contains`)
+   - Each relationship field returns a Connection type following the GraphQL Relay pattern
+   - Target entities are discovered by traversing: RelOut type → relationship field → Connection → Edge → Node → Entity Type
+
+5. **Entity Type Name Conversion**: Field names in RelIn/RelOut types are snake_case (e.g., `tanzu_tas_space`), which must be converted to PascalCase with proper acronym handling:
+   - `tanzu_tas_space` → `Entity_Tanzu_TAS_Space_Type`
+   - Known acronyms (TAS, TKG, TMC, BOSH, VM, etc.) must remain uppercase
+   - This conversion is critical for building the relationship graph correctly
+
+6. **Relationship Navigation**: To traverse from Application to Foundation:
+   - Use `relationshipsOut.isContainedIn` (not `relationshipsIn.IsContainedIn`)
+   - Field names are **camelCase** in queries (e.g., `isContainedIn`, `contains`)
+   - Each step follows: `relationshipsOut { isContainedIn { edges { node { ... on TargetType { ... } } } } }`
 
 **Key Service Class**:
 ```java
@@ -1322,7 +1484,7 @@ class TanzuQueryToolTest {
     @Test
     void shouldExecuteValidQuery() {
         // Given
-        String query = "query { entityQuery { Entity_Tanzu_TAS_Foundation { edges { node { id } } } } }";
+        String query = "query { entityQuery { Entity_Tanzu_TAS_Foundation_Type(first: 10) { edges { node { id } } } } }";
         GraphQLResponse expectedResponse = GraphQLResponse.builder()
             .data(Map.of("entityQuery", Map.of()))
             .build();
@@ -1377,7 +1539,7 @@ class TanzuMcpServerIntegrationTest {
         String query = """
             query {
               entityQuery {
-                Entity_Tanzu_TAS_Foundation(first: 5) {
+                Entity_Tanzu_TAS_Foundation_Type(first: 5) {
                   edges {
                     node {
                       id
@@ -1443,7 +1605,7 @@ class McpToolsIntegrationTest {
     @Test
     void shouldExploreSchema() {
         SchemaExplorationResponse response = exploreTool.exploreSchema(
-            "Entity_Tanzu_TAS_Application",
+            "Entity_Tanzu_TAS_Application_Type",
             null,
             null
         );
@@ -1516,7 +1678,7 @@ public class TestDataFixtures {
         return GraphQLResponse.builder()
             .data(Map.of(
                 "entityQuery", Map.of(
-                    "Entity_Tanzu_TAS_Foundation", Map.of(
+                    "Entity_Tanzu_TAS_Foundation_Type", Map.of(
                         "edges", List.of(
                             Map.of("node", Map.of(
                                 "id", "foundation-1",
@@ -1535,7 +1697,7 @@ public class TestDataFixtures {
         cache.setTimestamp(Instant.now());
         
         TypeDefinition foundationType = TypeDefinition.builder()
-            .name("Entity_Tanzu_TAS_Foundation")
+            .name("Entity_Tanzu_TAS_Foundation_Type")
             .kind("OBJECT")
             .description("TAS Foundation entity")
             .fields(List.of(
@@ -1563,7 +1725,7 @@ class PerformanceTest {
     @Test
     @Timeout(value = 5, unit = TimeUnit.SECONDS)
     void shouldCompleteQueryWithin5Seconds() {
-        String query = "query { entityQuery { Entity_Tanzu_TAS_Foundation { edges { node { id } } } } }";
+        String query = "query { entityQuery { Entity_Tanzu_TAS_Foundation_Type(first: 10) { edges { node { id } } } } }";
         
         GraphQLResponse response = graphQLService.executeQuery(
             GraphQLRequest.builder().query(query).build()
@@ -1719,16 +1881,22 @@ Platform
 All entity lists use GraphQL Relay-style connections:
 ```graphql
 query {
-  entities {
-    edges {
-      node {
-        id
-        # entity fields
+  entityQuery {
+    Entity_Tanzu_TAS_Application_Type(first: 10) {
+      edges {
+        node {
+          id
+          entityId
+          entityName
+          properties {
+            # entity-specific fields
+          }
+        }
       }
-    }
-    pageInfo {
-      hasNextPage
-      endCursor
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
     }
   }
 }
@@ -1737,26 +1905,52 @@ query {
 **Common Entity Types**:
 
 1. **Foundation-Level Entities**
-   - `Entity_Tanzu_TAS_Foundation`
-   - `Entity_Tanzu_TAS_Organization`
-   - `Entity_Tanzu_TAS_Space`
-   - `Entity_Tanzu_TAS_Application`
+   - `Entity_Tanzu_TAS_Foundation_Type`
+   - `Entity_Tanzu_TAS_Organization_Type`
+   - `Entity_Tanzu_TAS_Space_Type`
+   - `Entity_Tanzu_TAS_Application_Type`
 
-2. **Artifact Entities**
+2. **Supporting Types for Entities**
+   - Connection types: `Entity_Tanzu_TAS_*Connection` (for pagination)
+   - Query types: `Entity_Tanzu_TAS_*_Query` (for query entry points)
+   - Edge types: `Entity_Tanzu_TAS_*Edge` (for connection edges)
+   - Properties types: `Entity_Tanzu_TAS_*_Properties` (entity-specific properties)
+   - RelIn/RelOut types: For relationship traversal
+
+3. **Artifact Entities**
    - `ArtifactMetadata`
    - `ArtifactSBOM`
    - `ArtifactVulnerability`
    - `SpringArtifactMetadata`
 
-3. **Infrastructure Entities**
+4. **Infrastructure Entities**
    - `ManagementEndpoint`
    - `ManagementEndpointCollector`
    - `CapacityInfo`
 
-4. **Security Entities**
+5. **Security Entities**
    - `ArtifactVulnerabilityEntityDetails`
    - `Insight`
    - `TanzuHubPolicy`
+
+**Entity Type Naming Pattern**:
+All Tanzu entity types follow the pattern: `Entity_Tanzu_{Domain}_{EntityName}_Type`
+
+**Entity Structure**:
+Each entity type implements these interfaces:
+- `EntityTypedInterface` - Common entity interface
+- `Node` - Global ID interface
+- `NodeVersion` - Versioning support
+
+Common fields on all entities:
+- `id: ID!` - Opaque global ID
+- `entityId: EntityId!` - Canonical entity identifier
+- `entityName: String` - Human-readable name
+- `entityType: String` - Type discriminator
+- `properties: Entity_*_Properties` - Type-specific properties
+- `relationshipsIn: Entity_*_RelIn` - Incoming relationships
+- `relationshipsOut: Entity_*_RelOut` - Outgoing relationships
+- `tags: [Tag]!` - Key/value tags
 
 #### Section 4: Common Workflows
 
@@ -1770,30 +1964,48 @@ query {
 
 ### Example Query Pattern:
 ```graphql
-query FindApplications($foundationId: ID!) {
+query FindApplications {
   entityQuery {
-    Entity_Tanzu_TAS_Foundation(id: $foundationId) {
-      properties {
-        name
-      }
-      IsContainedIn_RelOut {
-        edges {
-          node {
-            ... on Entity_Tanzu_TAS_Organization {
-              properties { name }
-              IsContainedIn_RelOut {
-                edges {
-                  node {
-                    ... on Entity_Tanzu_TAS_Space {
-                      properties { name }
-                      IsContainedIn_RelOut {
-                        edges {
-                          node {
-                            ... on Entity_Tanzu_TAS_Application {
-                              properties {
-                                name
-                                state
-                                instances
+    typed {
+      tanzu {
+        tas {
+          foundation {
+            query(first: 10) {
+              edges {
+                node {
+                  id
+                  properties { name }
+                  # Navigate to organizations via relationships
+                  relationshipsIn {
+                    contains {
+                      edges {
+                        node {
+                          ... on Entity_Tanzu_TAS_Organization_Type {
+                            properties { name }
+                            relationshipsIn {
+                              contains {
+                                edges {
+                                  node {
+                                    ... on Entity_Tanzu_TAS_Space_Type {
+                                      properties { name }
+                                      relationshipsIn {
+                                        contains {
+                                          edges {
+                                            node {
+                                              ... on Entity_Tanzu_TAS_Application_Type {
+                                                properties {
+                                                  name
+                                                  state
+                                                  instances
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
                               }
                             }
                           }
@@ -1877,8 +2089,10 @@ mutation CreateMetricAlert($input: ObservabilityMetricAlertCreateInput!) {
 
 **1. Always Use Fragments for Repeated Structures**
 ```graphql
-fragment AppDetails on Entity_Tanzu_TAS_Application {
+fragment AppDetails on Entity_Tanzu_TAS_Application_Type {
   id
+  entityId
+  entityName
   properties {
     name
     state
@@ -1889,7 +2103,7 @@ fragment AppDetails on Entity_Tanzu_TAS_Application {
 
 query {
   entityQuery {
-    Entity_Tanzu_TAS_Application(first: 10) {
+    Entity_Tanzu_TAS_Application_Type(first: 10) {
       edges {
         node {
           ...AppDetails
@@ -1909,7 +2123,8 @@ query {
 ```graphql
 query FilteredApps {
   entityQuery {
-    Entity_Tanzu_TAS_Application(
+    Entity_Tanzu_TAS_Application_Type(
+      first: 50
       filter: {
         property: "state"
         value: "STARTED"
@@ -1917,7 +2132,7 @@ query FilteredApps {
     ) {
       edges {
         node {
-          properties { name }
+          properties { name state }
         }
       }
     }
@@ -1948,23 +2163,45 @@ query PaginatedQuery($after: String) {
 - `IsAssociatedWith`: Peer relationships (Application â†’ Service Instance)
 - `IsDeployedBy`: Deployment relationships (Foundation â†’ Ops Manager)
 
+**Relationship Access**:
+Entities expose relationships through two fields:
+- `relationshipsIn: Entity_*_RelIn` - Incoming relationships (entities pointing TO this entity)
+- `relationshipsOut: Entity_*_RelOut` - Outgoing relationships (entities this entity points TO)
+
 **Navigation Pattern**:
 ```graphql
-# From Application to Foundation (traversing up)
-Entity_Tanzu_TAS_Application {
-  IsContainedIn_RelIn {  # to Space
-    edges {
-      node {
-        ... on Entity_Tanzu_TAS_Space {
-          IsContainedIn_RelIn {  # to Organization
-            edges {
-              node {
-                ... on Entity_Tanzu_TAS_Organization {
-                  IsContainedIn_RelIn {  # to Foundation
-                    edges {
-                      node {
-                        ... on Entity_Tanzu_TAS_Foundation {
-                          properties { name }
+# From Application to Foundation (traversing up via relationshipsIn)
+query {
+  entityQuery {
+    Entity_Tanzu_TAS_Application_Type(first: 10) {
+      edges {
+        node {
+          properties { name }
+          relationshipsIn {
+            IsContainedIn {
+              edges {
+                node {
+                  ... on Entity_Tanzu_TAS_Space_Type {
+                    properties { name }
+                    relationshipsIn {
+                      IsContainedIn {
+                        edges {
+                          node {
+                            ... on Entity_Tanzu_TAS_Organization_Type {
+                              properties { name }
+                              relationshipsIn {
+                                IsContainedIn {
+                                  edges {
+                                    node {
+                                      ... on Entity_Tanzu_TAS_Foundation_Type {
+                                        properties { name }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
                         }
                       }
                     }
@@ -1989,7 +2226,8 @@ Entity_Tanzu_TAS_Application {
 
 **2. Type Confusion**
 - TAS entities vs Spring entities are different
-- Use correct type names (Entity_Tanzu_TAS_Application vs Entity_Tanzu_Spring_Application)
+- Use correct type names with `_Type` suffix (Entity_Tanzu_TAS_Application_Type vs Entity_Tanzu_Spring_Application_Type)
+- Don't forget the `_Type` suffix on entity types
 
 **3. Relationship Direction**
 - `RelIn`: Incoming relationships (parent â†’ child)
@@ -1999,11 +2237,15 @@ Entity_Tanzu_TAS_Application {
 - Different entities support different filters
 - Use `tanzu_explore_schema` to check available filters
 
+**5. Entity Type Names**
+- Always use the `_Type` suffix for entity types (e.g., `Entity_Tanzu_TAS_Application_Type`)
+- Connection, Query, Edge, and other supporting types don't use the `_Type` suffix
+
 #### Section 8: Quick Reference
 
 **Get All Foundations**:
 ```graphql
-query { entityQuery { Entity_Tanzu_TAS_Foundation { edges { node { id properties { name } } } } } }
+query { entityQuery { Entity_Tanzu_TAS_Foundation_Type(first: 20) { edges { node { id properties { name } } } } } }
 ```
 
 **Get Critical Vulnerabilities**:
@@ -2397,7 +2639,7 @@ Execute pre-built common query patterns.
 String query = """
     query {
       entityQuery {
-        Entity_Tanzu_TAS_Foundation {
+        Entity_Tanzu_TAS_Foundation_Type(first: 10) {
           edges {
             node {
               id
@@ -2890,7 +3132,7 @@ curl -X POST http://localhost:8080/mcp \
     "params": {
       "name": "tanzu_graphql_query",
       "arguments": {
-        "query": "query { entityQuery { Entity_Tanzu_TAS_Foundation { edges { node { id } } } } }"
+        "query": "query { entityQuery { Entity_Tanzu_TAS_Foundation_Type(first: 10) { edges { node { id } } } } }"
       }
     },
     "id": 1

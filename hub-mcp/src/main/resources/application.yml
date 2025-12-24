@@ -7,7 +7,13 @@ spring:
       server:
         name: tanzu-platform-mcp
         version: 1.0.0
-        sse-message-endpoint: /mcp/messages
+        protocol: STREAMABLE
+        type: SYNC
+        tool-callback-converter: true
+        capabilities:
+          tool: true
+        streamable-http:
+          mcp-endpoint: /mcp
 
 tanzu:
   platform:
@@ -37,3 +43,5 @@ logging:
     org.tanzu.hubmcp: DEBUG
     org.springframework.ai.mcp: DEBUG
 
+server:
+  shutdown: immediate
