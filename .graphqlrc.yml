@@ -1,0 +1,9 @@
+schema: tanzu-graphql-schema.graphql
+
+extensions:
+  endpoints:
+    default:
+      url: ${TANZU_PLATFORM_URL}/hub/graphql
+      headers:
+        Authorization: Bearer ${TOKEN}
+
