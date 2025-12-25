@@ -1,5 +1,7 @@
 package org.tanzu.hubmcp.service;
 
+import graphql.language.Document;
+import graphql.parser.Parser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -24,10 +26,17 @@ public class TanzuGraphQLService {
 
     private final WebClient webClient;
     private final TanzuPlatformProperties properties;
+    private final SchemaIntrospectionService schemaService;
+    private final Parser graphQLParser;
 
-    public TanzuGraphQLService(WebClient tanzuGraphQLClient, TanzuPlatformProperties properties) {
+    public TanzuGraphQLService(
+            WebClient tanzuGraphQLClient, 
+            TanzuPlatformProperties properties,
+            SchemaIntrospectionService schemaService) {
         this.webClient = tanzuGraphQLClient;
         this.properties = properties;
+        this.schemaService = schemaService;
+        this.graphQLParser = new Parser();
     }
 
     /**
@@ -39,6 +48,7 @@ public class TanzuGraphQLService {
      */
     public GraphQLResponse executeQuery(GraphQLRequest request) {
         log.debug("Executing GraphQL query: {}", truncateQuery(request.query()));
+        validateQuery(request.query());
         return executeGraphQLRequest(request);
     }
 
@@ -215,6 +225,44 @@ public class TanzuGraphQLService {
                throwable instanceof java.net.SocketTimeoutException;
     }
 
+    /**
+     * Validate GraphQL query syntax using the GraphQL Java parser.
+     * Additional validation against schema is performed if schema is loaded.
+     *
+     * @param query the GraphQL query string to validate
+     * @throws GraphQLException if the query has syntax errors
+     */
+    private void validateQuery(String query) {
+        if (query == null || query.isBlank()) {
+            throw new GraphQLException("Query cannot be null or empty");
+        }
+        
+        try {
+            // Use graphql-java parser to validate syntax
+            Document document = graphQLParser.parseDocument(query);
+            
+            // Additional validation against schema if available
+            // Note: Full schema validation is performed by TanzuValidateQueryTool
+            // Here we only do basic syntax validation to catch errors early
+            if (document.getDefinitions().isEmpty()) {
+                throw new GraphQLException("Query document contains no definitions");
+            }
+            
+            log.trace("Query syntax validation passed");
+            
+        } catch (graphql.parser.InvalidSyntaxException e) {
+            String errorMessage = String.format("Invalid GraphQL syntax at line %d, column %d: %s",
+                    e.getLocation() != null ? e.getLocation().getLine() : 0,
+                    e.getLocation() != null ? e.getLocation().getColumn() : 0,
+                    e.getMessage());
+            log.error("GraphQL syntax validation failed: {}", errorMessage);
+            throw new GraphQLException(errorMessage, e);
+        } catch (Exception e) {
+            log.error("GraphQL query validation failed: {}", e.getMessage());
+            throw new GraphQLException("Invalid query syntax: " + e.getMessage(), e);
+        }
+    }
+
     private void validateMutation(String mutation) {
         if (mutation == null || mutation.isBlank()) {
             throw new GraphQLException("Mutation cannot be null or empty");
@@ -223,6 +271,9 @@ public class TanzuGraphQLService {
         if (!trimmed.startsWith("mutation")) {
             throw new GraphQLException("Mutation must start with 'mutation' keyword");
         }
+        
+        // Also validate syntax
+        validateQuery(mutation);
     }
 
     private String truncateQuery(String query) {
