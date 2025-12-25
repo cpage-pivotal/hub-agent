@@ -1317,7 +1317,23 @@ public class GraphQLClientConfig {
 
 ---
 
-### 1.4 Schema Caching Strategy
+### 1.4 Schema Caching Strategy ✅ IMPLEMENTED
+
+**Implementation Status**: Schema caching strategy fully implemented with Caffeine cache, scheduled refresh, and startup warmup.
+
+**Implemented Components**:
+- ✅ `CacheConfig.java` - Caffeine cache manager with configurable TTL and max size
+- ✅ `SchemaCache.java` - Schema cache model with type storage and lookup
+- ✅ `SchemaIntrospectionService.java` - Full introspection service with caching
+- ✅ `SchemaCacheRefreshTask.java` - Scheduled refresh and startup warmup
+- ✅ Cache configuration in `application.yml`
+
+**Key Features**:
+- 24-hour TTL on cached schema (configurable via `tanzu.cache.schema.ttl`)
+- Daily scheduled refresh at 2 AM (configurable via `tanzu.cache.schema.refresh-cron`)
+- Startup warmup - Schema loads 5 seconds after startup to avoid cold-start latency
+- Cache statistics available via `/actuator/caches` endpoint
+- Graceful error handling - If refresh fails, existing cache remains valid
 
 **Spring Cache Configuration**:
 ```java
@@ -1484,19 +1500,63 @@ public class EntityRelationship {
 }
 ```
 
-**Scheduled Cache Refresh**:
+**Scheduled Cache Refresh** (Implemented in `SchemaCacheRefreshTask.java`):
 ```java
 @Component
 @EnableScheduling
 public class SchemaCacheRefreshTask {
     
+    private static final Logger log = LoggerFactory.getLogger(SchemaCacheRefreshTask.class);
     private final SchemaIntrospectionService schemaService;
     
-    @Scheduled(cron = "${tanzu.cache.schema.refresh-cron:0 0 2 * * ?}") // 2 AM daily
+    /**
+     * Refresh the schema cache on a scheduled basis.
+     * Default schedule: 2 AM daily (0 0 2 * * ?)
+     */
+    @Scheduled(cron = "${tanzu.cache.schema.refresh-cron:0 0 2 * * ?}")
     public void refreshSchemaCache() {
-        schemaService.refreshSchema();
+        log.info("Starting scheduled schema cache refresh");
+        long startTime = System.currentTimeMillis();
+        
+        try {
+            schemaService.refreshSchema();
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Schema cache refresh completed successfully in {}ms", duration);
+        } catch (Exception e) {
+            log.error("Schema cache refresh failed: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Warm up the cache on application startup.
+     * Loads schema 5 seconds after startup to avoid cold-start latency.
+     */
+    @Scheduled(initialDelay = 5000, fixedDelay = Long.MAX_VALUE)
+    public void warmupCacheOnStartup() {
+        log.info("Warming up schema cache on application startup");
+        try {
+            var schema = schemaService.getSchema();
+            log.info("Schema cache warmup completed: {} types loaded", schema.getTypeCount());
+            
+            // Also warm up the relationship graph
+            var relationships = schemaService.getEntityRelationships();
+            log.info("Entity relationships cached: {} entities with relationships", relationships.size());
+        } catch (Exception e) {
+            log.warn("Schema cache warmup failed: {}. Cache will be populated on first request.", 
+                    e.getMessage());
+        }
     }
 }
+```
+
+**Application Configuration** (Updated `application.yml`):
+```yaml
+tanzu:
+  cache:
+    schema:
+      ttl: 24h
+      max-size: 100
+      refresh-cron: "0 0 2 * * ?"  # Daily at 2 AM
 ```
 
 ### 1.5 Testing Strategy
