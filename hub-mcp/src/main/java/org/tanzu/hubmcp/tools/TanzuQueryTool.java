@@ -40,19 +40,28 @@ public class TanzuQueryTool {
             - Observability metrics and alerts
             - Capacity information and recommendations
             
-            The API uses Relay-style connections with edges/nodes for lists.
+            IMPORTANT: Queries must use the typed hierarchy: entityQuery -> typed -> tanzu -> {domain} -> {entity} -> query(...)
+            Domains and entity types are lowercase (tas, foundation, application).
             
-            Example query:
+            Example query for listing foundations:
             query {
               entityQuery {
-                Entity_Tanzu_TAS_Foundation(first: 10) {
-                  edges {
-                    node {
-                      id
-                      properties { name }
+                typed {
+                  tanzu {
+                    tas {
+                      foundation {
+                        query(first: 10) {
+                          edges {
+                            node {
+                              id
+                              properties { name }
+                            }
+                          }
+                          pageInfo { hasNextPage endCursor }
+                        }
+                      }
                     }
                   }
-                  pageInfo { hasNextPage endCursor }
                 }
               }
             }

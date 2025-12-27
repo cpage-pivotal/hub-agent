@@ -109,20 +109,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListFoundations($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Foundation(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            apiEndpoint
-                            version
+                    typed {
+                      tanzu {
+                        tas {
+                          foundation {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -136,19 +142,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListOrganizations($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Organization(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            guid
+                    typed {
+                      tanzu {
+                        tas {
+                          organization {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -162,19 +175,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListSpaces($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Space(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            guid
+                    typed {
+                      tanzu {
+                        tas {
+                          space {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -188,23 +208,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListApplications($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Application(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            state
-                            instances
-                            memory
-                            diskQuota
-                            buildpack
+                    typed {
+                      tanzu {
+                        tas {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -213,19 +236,25 @@ public class TanzuCommonQueriesTool {
         ));
         
         map.put("get_foundation_by_name", new QueryTemplate(
-                "Get foundation details by name",
+                "Get foundation details by name - use entityName filter",
                 Map.of(),
                 """
                 query GetFoundationByName($name: String!) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Foundation(filter: {property: "name", value: $name}) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            apiEndpoint
-                            version
+                    typed {
+                      tanzu {
+                        tas {
+                          foundation {
+                            query(filter: {property: "entityName", value: $name}) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -295,16 +324,20 @@ public class TanzuCommonQueriesTool {
                 """
                 query GetAppHealth($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Application(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            state
-                            instances
-                            runningInstances
-                            memory
+                    typed {
+                      tanzu {
+                        tas {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -320,20 +353,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListSpringApps($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_Spring_Application(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            springBootVersion
-                            javaVersion
+                    typed {
+                      tanzu {
+                        spring {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -417,14 +456,20 @@ public class TanzuCommonQueriesTool {
                 """
                 query FindStoppedApps($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Application(first: $first, filter: {property: "state", value: "STOPPED"}) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            state
-                            instances
+                    typed {
+                      tanzu {
+                        tas {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -440,12 +485,20 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListServiceBindings($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_ServiceBinding(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
+                    typed {
+                      tanzu {
+                        tas {
+                          serviceBinding {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  properties {
+                                    name
+                                  }
+                                }
+                              }
+                            }
                           }
                         }
                       }

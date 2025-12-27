@@ -26,16 +26,13 @@ public class TanzuGraphQLService {
 
     private final WebClient webClient;
     private final TanzuPlatformProperties properties;
-    private final SchemaIntrospectionService schemaService;
     private final Parser graphQLParser;
 
     public TanzuGraphQLService(
             WebClient tanzuGraphQLClient, 
-            TanzuPlatformProperties properties,
-            SchemaIntrospectionService schemaService) {
+            TanzuPlatformProperties properties) {
         this.webClient = tanzuGraphQLClient;
         this.properties = properties;
-        this.schemaService = schemaService;
         this.graphQLParser = new Parser();
     }
 
