@@ -2,6 +2,25 @@
 
 This document contains 20+ pre-built query templates for frequent operations.
 
+## ⚠️ EFFICIENCY GUIDANCE
+
+**Before choosing a pattern, consider the question type:**
+
+| Question Type | Recommended Pattern | Why |
+|--------------|---------------------|-----|
+| "How many stopped apps per space?" | `count_stopped_apps_by_space` | Pre-aggregated, small response |
+| "Spaces with more than N stopped apps?" | `count_stopped_apps_by_space` | Returns counts, not raw data |
+| "What's the app state distribution?" | `summarize_app_states` | Returns counts by state |
+| "List all spaces" (overview) | `spaces_summary` | No nested app data |
+| "List spaces with their apps" (detail) | `spaces_with_apps` | **WARNING: Large response!** |
+
+**Rule of thumb:** If the question is about **counts** or **aggregations**, use an efficiency pattern. Only use detail patterns when you need the actual entity data.
+
+## CRITICAL: Field Names
+
+- **Entity name**: Use `entityName` at entity level, NOT `properties.name`
+- **Relationships**: Use `tanzu_tas_{entity}` fields, NOT generic `contains`
+
 ## Foundation Queries
 
 ### 1. List All Foundations
@@ -17,9 +36,7 @@ query ListFoundations {
               edges {
                 node {
                   id
-                  properties {
-                    name
-                  }
+                  entityName
                 }
               }
               pageInfo {
@@ -50,9 +67,7 @@ query FoundationDetails($first: Int = 10) {
                   id
                   entityId
                   entityName
-                  properties {
-                    name
-                  }
+                  entityType
                 }
               }
             }
@@ -79,8 +94,10 @@ query ListOrganizations {
               edges {
                 node {
                   id
+                  entityName
                   properties {
-                    name
+                    guid
+                    foundation
                   }
                 }
               }
@@ -109,13 +126,21 @@ query OrgWithSpaces {
             query(first: 10) {
               edges {
                 node {
-                  properties { name }
+                  entityName
+                  properties {
+                    guid
+                    foundation
+                  }
                   relationshipsIn {
-                    contains {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Space_Type {
-                            properties { name }
+                    isContainedIn {
+                      tanzu_tas_space(first: 50) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              guid
+                              totalAppCount
+                            }
                           }
                         }
                       }
@@ -147,8 +172,11 @@ query ListSpaces {
               edges {
                 node {
                   id
+                  entityName
                   properties {
-                    name
+                    guid
+                    totalAppCount
+                    foundation
                   }
                 }
               }
@@ -165,9 +193,67 @@ query ListSpaces {
 }
 ```
 
+### 6. Spaces with Applications (Important!)
+
+This is the correct way to query spaces with their applications:
+
+```graphql
+query SpacesWithApps {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          space {
+            query(first: 100) {
+              edges {
+                node {
+                  entityName
+                  properties {
+                    guid
+                    totalAppCount
+                    foundation
+                    organizationGUID
+                  }
+                  relationshipsIn {
+                    isContainedIn {
+                      tanzu_tas_application(first: 100) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              state
+                              health_status
+                              instanceCount
+                              runningInstanceCount
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Use this for questions like:
+- "Which spaces have stopped apps?"
+- "Find spaces with more than N stopped apps"
+- "List apps by space"
+
 ## Application Queries
 
-### 6. List All Applications
+### 7. List All Applications
 
 ```graphql
 query ListApplications {
@@ -180,10 +266,12 @@ query ListApplications {
               edges {
                 node {
                   id
+                  entityName
                   properties {
-                    name
                     state
-                    instances
+                    health_status
+                    instanceCount
+                    runningInstanceCount
                   }
                 }
               }
@@ -200,7 +288,7 @@ query ListApplications {
 }
 ```
 
-### 7. Get Application Details
+### 8. Get Application Details
 
 ```graphql
 query AppDetails {
@@ -214,11 +302,18 @@ query AppDetails {
                 node {
                   id
                   entityId
+                  entityName
                   properties {
-                    name
                     state
-                    instances
-                    memory
+                    health_status
+                    instanceCount
+                    runningInstanceCount
+                    crashedInstanceCount
+                    buildpack
+                    spaceGUID
+                    foundation
+                    routes
+                    totalMemoryLimitMB
                   }
                 }
               }
@@ -231,7 +326,7 @@ query AppDetails {
 }
 ```
 
-### 8. Find Stopped Applications
+### 9. Find Stopped Applications
 
 ```graphql
 query StoppedApps {
@@ -240,12 +335,61 @@ query StoppedApps {
       tanzu {
         tas {
           application {
-            query(first: 50) {
+            query(first: 100) {
               edges {
                 node {
+                  entityName
                   properties {
-                    name
                     state
+                    health_status
+                    spaceGUID
+                    foundation
+                  }
+                }
+              }
+              pageInfo {
+                hasNextPage
+                endCursor
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+# Filter client-side for state = "STOPPED"
+```
+
+### 10. Application to Space Navigation
+
+```graphql
+query AppToSpace {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          application {
+            query(first: 10) {
+              edges {
+                node {
+                  entityName
+                  properties {
+                    state
+                  }
+                  relationshipsOut {
+                    isContainedIn {
+                      tanzu_tas_space(first: 1) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              guid
+                            }
+                          }
+                        }
+                      }
+                    }
                   }
                 }
               }
@@ -256,12 +400,11 @@ query StoppedApps {
     }
   }
 }
-# Note: Filter client-side for state = "STOPPED"
 ```
 
 ## Security Queries
 
-### 9. Find Critical Vulnerabilities
+### 11. Find Critical Vulnerabilities
 
 ```graphql
 query CriticalVulnerabilities {
@@ -282,7 +425,7 @@ query CriticalVulnerabilities {
 }
 ```
 
-### 10. Find High Severity Vulnerabilities
+### 12. Find High Severity Vulnerabilities
 
 ```graphql
 query HighVulnerabilities {
@@ -303,7 +446,7 @@ query HighVulnerabilities {
 }
 ```
 
-### 11. Find Open Vulnerabilities
+### 13. Find Open Vulnerabilities
 
 ```graphql
 query OpenVulnerabilities {
@@ -321,7 +464,7 @@ query OpenVulnerabilities {
 }
 ```
 
-### 12. Get Vulnerability Details with Affected Artifacts
+### 14. Get Vulnerability Details with Affected Artifacts
 
 ```graphql
 query VulnWithArtifacts {
@@ -349,7 +492,7 @@ query VulnWithArtifacts {
 
 ## Observability Queries
 
-### 13. List Active Alerts
+### 15. List Active Alerts
 
 ```graphql
 query ActiveAlerts {
@@ -367,7 +510,7 @@ query ActiveAlerts {
 }
 ```
 
-### 14. List All Alerts
+### 16. List All Alerts
 
 ```graphql
 query AllAlerts {
@@ -391,7 +534,7 @@ query AllAlerts {
 
 ## Capacity Queries
 
-### 15. Get Capacity Recommendations
+### 17. Get Capacity Recommendations
 
 ```graphql
 query CapacityRecommendations {
@@ -410,9 +553,9 @@ query CapacityRecommendations {
 }
 ```
 
-## Relationship Navigation Queries
+## Multi-Level Navigation Queries
 
-### 16. Application to Foundation Path
+### 18. Application to Foundation Path
 
 ```graphql
 query AppToFoundation {
@@ -424,25 +567,26 @@ query AppToFoundation {
             query(first: 5) {
               edges {
                 node {
-                  properties { name }
+                  entityName
+                  properties { state }
                   relationshipsOut {
                     isContainedIn {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Space_Type {
-                            properties { name }
+                      tanzu_tas_space(first: 1) {
+                        edges {
+                          node {
+                            entityName
                             relationshipsOut {
                               isContainedIn {
-                                edges {
-                                  node {
-                                    ... on Entity_Tanzu_TAS_Organization_Type {
-                                      properties { name }
+                                tanzu_tas_organization(first: 1) {
+                                  edges {
+                                    node {
+                                      entityName
                                       relationshipsOut {
                                         isContainedIn {
-                                          edges {
-                                            node {
-                                              ... on Entity_Tanzu_TAS_Foundation_Type {
-                                                properties { name }
+                                          tanzu_tas_foundation(first: 1) {
+                                            edges {
+                                              node {
+                                                entityName
                                               }
                                             }
                                           }
@@ -469,7 +613,7 @@ query AppToFoundation {
 }
 ```
 
-### 17. Foundation to Applications Path
+### 19. Foundation to Applications Path
 
 ```graphql
 query FoundationToApps {
@@ -481,25 +625,28 @@ query FoundationToApps {
             query(first: 1) {
               edges {
                 node {
-                  properties { name }
+                  entityName
                   relationshipsIn {
-                    contains {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Organization_Type {
-                            properties { name }
+                    isContainedIn {
+                      tanzu_tas_organization(first: 50) {
+                        edges {
+                          node {
+                            entityName
                             relationshipsIn {
-                              contains {
-                                edges {
-                                  node {
-                                    ... on Entity_Tanzu_TAS_Space_Type {
-                                      properties { name }
+                              isContainedIn {
+                                tanzu_tas_space(first: 50) {
+                                  edges {
+                                    node {
+                                      entityName
                                       relationshipsIn {
-                                        contains {
-                                          edges {
-                                            node {
-                                              ... on Entity_Tanzu_TAS_Application_Type {
-                                                properties { name state }
+                                        isContainedIn {
+                                          tanzu_tas_application(first: 100) {
+                                            edges {
+                                              node {
+                                                entityName
+                                                properties {
+                                                  state
+                                                }
                                               }
                                             }
                                           }
@@ -528,7 +675,7 @@ query FoundationToApps {
 
 ## Paginated Queries
 
-### 18. Paginated Applications
+### 20. Paginated Applications
 
 ```graphql
 query PaginatedApps($after: String) {
@@ -541,8 +688,8 @@ query PaginatedApps($after: String) {
               edges {
                 node {
                   id
+                  entityName
                   properties {
-                    name
                     state
                   }
                 }
@@ -562,16 +709,7 @@ query PaginatedApps($after: String) {
 
 ## Summary Queries
 
-### 19. Platform Overview
-
-Combine multiple queries for a platform summary:
-
-1. Count foundations
-2. Count applications
-3. Count critical vulnerabilities
-4. Count active alerts
-
-### 20. Health Check Query
+### 21. Health Check Query
 
 ```graphql
 query HealthCheck {
@@ -584,6 +722,7 @@ query HealthCheck {
               edges {
                 node {
                   id
+                  entityName
                 }
               }
             }
@@ -595,22 +734,112 @@ query HealthCheck {
 }
 ```
 
+## Efficient Aggregation Queries
+
+### 22. Count Stopped Apps by Space (RECOMMENDED)
+
+Use this for questions like "spaces with more than N stopped apps":
+
+```graphql
+# Use tanzu_common_queries(pattern: "count_stopped_apps_by_space")
+# Returns pre-computed counts, NOT raw data
+```
+
+**Response includes:**
+- `spacesWithStoppedApps`: List of spaces with stopped counts
+- `insights.spacesWithMoreThan2StoppedApps`: Direct answer to common question
+- `summary`: Total counts
+
+### 23. Summarize App States (RECOMMENDED)
+
+Use for app state distribution questions:
+
+```graphql
+# Use tanzu_common_queries(pattern: "summarize_app_states")
+# Returns counts by state, health, and foundation
+```
+
+### 24. Spaces Summary (RECOMMENDED)
+
+Use for space overview without app details:
+
+```graphql
+# Use tanzu_common_queries(pattern: "spaces_summary")
+# Returns space info with totalAppCount, no nested apps
+```
+
 ## Usage with MCP Tools
 
-These queries can be executed using:
+### Using tanzu_common_queries
 
 ```
-tanzu_common_queries with pattern parameter
+tanzu_common_queries(pattern: "count_stopped_apps_by_space")
 ```
 
-Or directly via:
+**EFFICIENCY PATTERNS (use for aggregation questions):**
+- `count_stopped_apps_by_space` - **BEST for "spaces with N stopped apps"**
+- `summarize_app_states` - App state distribution counts
+- `spaces_summary` - Space overview with counts
+
+**DETAIL PATTERNS (use when you need full entity data):**
+- `list_foundations`
+- `list_organizations`
+- `list_spaces`
+- `list_applications`
+- `find_stopped_apps`
+- `spaces_with_apps` - ⚠️ **WARNING: Can return very large responses!**
+- And more...
+
+### Using tanzu_graphql_query Directly
 
 ```
-tanzu_graphql_query with query parameter
+tanzu_graphql_query(query: "{ entityQuery { ... } }")
 ```
 
-Always validate first:
+### Always Validate First
 
 ```
-tanzu_validate_query with query parameter
+tanzu_validate_query(query: "{ entityQuery { ... } }")
+```
+
+## Common Mistakes to Avoid
+
+### WRONG - Using `properties.name`
+
+```graphql
+# WRONG
+node {
+  properties {
+    name  # This field doesn't exist!
+  }
+}
+
+# CORRECT
+node {
+  entityName  # Name is at entity level
+  properties {
+    guid
+    state
+  }
+}
+```
+
+### WRONG - Using generic `contains`
+
+```graphql
+# WRONG
+relationshipsIn {
+  contains {  # This field doesn't exist!
+    ...
+  }
+}
+
+# CORRECT
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application(first: 100) {  # Use snake_case entity type
+      ...
+    }
+  }
+}
 ```

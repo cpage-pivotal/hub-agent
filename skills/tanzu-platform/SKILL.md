@@ -28,6 +28,29 @@ Read this skill **BEFORE** using any Tanzu MCP tools when:
 | `tanzu_find_entity_path` | Navigate relationships | Finding paths between entity types |
 | `tanzu_common_queries` | Pre-built patterns | Executing common operations quickly |
 
+## ⚠️ CRITICAL: Choosing Efficient Patterns
+
+**Before executing any query, determine if the question asks for COUNTS/AGGREGATIONS vs DETAILS:**
+
+| Question Type | Pattern to Use | Example Questions |
+|--------------|----------------|-------------------|
+| **Counts/Aggregations** | `count_stopped_apps_by_space`, `summarize_app_states` | "How many stopped apps?", "Spaces with >2 stopped apps?" |
+| **Summaries** | `spaces_summary`, `list_spaces` | "List all spaces", "Space overview" |
+| **Full Details** | `spaces_with_apps`, `list_applications` | "Show me all apps in each space with their config" |
+
+### Example: Answering "Are there spaces with more than 2 stopped apps?"
+
+**❌ WRONG (huge response, may timeout):**
+```
+tanzu_common_queries(pattern: "spaces_with_apps")  # Returns ALL spaces with ALL apps!
+```
+
+**✅ CORRECT (efficient, pre-aggregated):**
+```
+tanzu_common_queries(pattern: "count_stopped_apps_by_space")
+# Response includes: insights.spacesWithMoreThan2StoppedApps
+```
+
 ## Query Construction Workflow
 
 Follow this workflow for reliable query construction:
@@ -60,9 +83,7 @@ query {
               edges {
                 node {
                   id
-                  properties {
-                    name
-                  }
+                  entityName            # Name is at entity level, NOT properties!
                 }
               }
               pageInfo {
@@ -74,6 +95,30 @@ query {
         }
       }
     }
+  }
+}
+```
+
+### CRITICAL: Entity Name vs Properties
+
+**The entity name is `entityName` at the entity level, NOT `properties.name`!**
+
+```graphql
+# CORRECT - entityName at entity level
+node {
+  id
+  entityId
+  entityName                          # This is the entity's name!
+  properties {
+    guid                              # Properties has guid, state, etc.
+    state
+  }
+}
+
+# WRONG - name is NOT a field on properties types
+node {
+  properties {
+    name                              # ERROR: field "name" doesn't exist!
   }
 }
 ```
@@ -100,6 +145,13 @@ query {
     }
   }
 }
+
+# WRONG - name is not a property field
+node {
+  properties {
+    name  # This doesn't exist! Use entityName at entity level
+  }
+}
 ```
 
 ## Naming Conventions
@@ -113,8 +165,56 @@ Understanding naming conventions is critical for this API:
 | Entity type names | PascalCase with `_Type` suffix | `Entity_Tanzu_TAS_Foundation_Type` |
 | Query types | PascalCase with `_Query` suffix | `Entity_Tanzu_TAS_Foundation_Query` |
 | Properties types | PascalCase with `_Properties` suffix | `Entity_Tanzu_TAS_Foundation_Properties` |
-| Relationship fields | camelCase | `isContainedIn`, `contains` |
+| Relationship entity fields | snake_case | `tanzu_tas_application`, `tanzu_tas_space` |
 | Known acronyms | UPPERCASE | `TAS`, `TKG`, `TMC`, `BOSH`, `VM` |
+
+## Entity Fields
+
+### Common Entity Fields (on ALL entity types)
+
+```graphql
+node {
+  id                    # Opaque global ID
+  entityId              # Canonical entity identifier  
+  entityName            # Human-readable name (THIS IS THE NAME!)
+  entityType            # Type discriminator
+  properties { ... }    # Type-specific properties (no 'name' field!)
+  relationshipsIn { ... }   # Incoming relationships
+  relationshipsOut { ... }  # Outgoing relationships
+  tags { key value }    # Key/value tags
+}
+```
+
+### Application Properties (Entity_Tanzu_TAS_Application_Properties)
+
+```graphql
+properties {
+  guid                  # Application GUID
+  state                 # STARTED or STOPPED
+  health_status         # RUNNING, DOWN, or STOPPED
+  instanceCount         # Desired instances
+  runningInstanceCount  # Running instances
+  crashedInstanceCount  # Crashed instances
+  buildpack             # Buildpack name
+  spaceGUID             # Parent space GUID
+  foundation            # Foundation name
+  routes                # Application routes
+  totalMemoryLimitMB    # Memory limit
+}
+```
+
+### Space Properties (Entity_Tanzu_TAS_Space_Properties)
+
+```graphql
+properties {
+  guid                  # Space GUID
+  foundation            # Foundation name
+  organizationGUID      # Parent organization GUID
+  totalAppCount         # Number of apps
+  totalMemoryLimitMB    # Memory used
+  totalMemoryQuotaMB    # Memory quota
+}
+```
 
 ## Domain Quick Reference
 
@@ -143,32 +243,50 @@ Platform
 
 ## Relationship Navigation
 
-Entities expose relationships through two fields:
+### CRITICAL: Relationship Field Names
 
-- **`relationshipsOut`**: Outgoing relationships (child → parent, use `isContainedIn`)
-- **`relationshipsIn`**: Incoming relationships (parent → children, use `contains`)
+Relationships use **snake_case entity type names**, NOT generic `contains`:
 
-### Navigating Up (Child to Parent)
+| To Navigate | Use Field | In Type |
+|-------------|-----------|---------|
+| Space → Applications | `relationshipsIn.isContainedIn.tanzu_tas_application` | Space |
+| Organization → Spaces | `relationshipsIn.isContainedIn.tanzu_tas_space` | Organization |
+| Foundation → Organizations | `relationshipsIn.isContainedIn.tanzu_tas_organization` | Foundation |
+| Application → Space | `relationshipsOut.isContainedIn.tanzu_tas_space` | Application |
+| Space → Organization | `relationshipsOut.isContainedIn.tanzu_tas_organization` | Space |
 
-To traverse from Application → Space → Organization → Foundation:
+### Relationship Directions
+
+- **`relationshipsIn`**: Entities that ARE CONTAINED IN this entity (children)
+- **`relationshipsOut`**: Entities that this entity IS CONTAINED IN (parents)
+
+### Navigating Down: Space → Applications (CORRECT)
 
 ```graphql
-query {
+query SpacesWithApps {
   entityQuery {
     typed {
       tanzu {
         tas {
-          application {
-            query(first: 5) {
+          space {
+            query(first: 100) {
               edges {
                 node {
-                  properties { name }
-                  relationshipsOut {
+                  entityName                    # Space name
+                  properties {
+                    guid
+                    totalAppCount
+                  }
+                  relationshipsIn {
                     isContainedIn {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Space_Type {
-                            properties { name }
+                      tanzu_tas_application(first: 100) {  # Snake_case field!
+                        edges {
+                          node {
+                            entityName          # App name  
+                            properties {
+                              state
+                              health_status
+                            }
                           }
                         }
                       }
@@ -185,27 +303,31 @@ query {
 }
 ```
 
-### Navigating Down (Parent to Children)
-
-To traverse from Foundation → Organizations → Spaces → Applications:
+### Navigating Up: Application → Space (CORRECT)
 
 ```graphql
-query {
+query AppToSpace {
   entityQuery {
     typed {
       tanzu {
         tas {
-          foundation {
-            query(first: 5) {
+          application {
+            query(first: 10) {
               edges {
                 node {
-                  properties { name }
-                  relationshipsIn {
-                    contains {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Organization_Type {
-                            properties { name }
+                  entityName                    # App name
+                  properties {
+                    state
+                  }
+                  relationshipsOut {
+                    isContainedIn {
+                      tanzu_tas_space(first: 1) {  # Snake_case field!
+                        edges {
+                          node {
+                            entityName          # Space name
+                            properties {
+                              guid
+                            }
                           }
                         }
                       }
@@ -224,14 +346,14 @@ query {
 
 ## Critical Rules
 
-1. **Always validate queries** before execution using `tanzu_validate_query`
-2. **Request only needed fields** to avoid complexity limits
-3. **Handle pagination** - use cursor-based patterns from `patterns/pagination.md`
-4. **Check relationship direction** - `relationshipsIn` vs `relationshipsOut` matters
-5. **Use domain filtering** in `tanzu_explore_schema` to narrow 1,382 types
-6. **Domains and entity types are lowercase** in queries
-7. **Entity type names use PascalCase** with `_Type` suffix
-8. **Relationship fields are camelCase** (`isContainedIn`, not `IsContainedIn`)
+1. **Entity name is `entityName`** at entity level, NOT `properties.name`
+2. **Relationship fields use snake_case** like `tanzu_tas_application`, NOT `contains`
+3. **Always validate queries** before execution using `tanzu_validate_query`
+4. **Request only needed fields** to avoid complexity limits
+5. **Handle pagination** - use cursor-based patterns from `patterns/pagination.md`
+6. **Check relationship direction** - `relationshipsIn` (children) vs `relationshipsOut` (parent)
+7. **Domains and entity types are lowercase** in queries
+8. **Entity type names use PascalCase** with `_Type` suffix
 
 ## Quick Reference Queries
 
@@ -248,7 +370,7 @@ query {
               edges {
                 node {
                   id
-                  properties { name }
+                  entityName
                 }
               }
             }
@@ -260,7 +382,7 @@ query {
 }
 ```
 
-### List Applications in a Space
+### List Applications with State
 
 ```graphql
 query {
@@ -273,16 +395,60 @@ query {
               edges {
                 node {
                   id
+                  entityName
                   properties {
-                    name
                     state
-                    instances
+                    health_status
+                    instanceCount
+                    runningInstanceCount
                   }
                 }
               }
               pageInfo {
                 hasNextPage
                 endCursor
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Spaces with Their Applications
+
+```graphql
+query SpacesWithApps {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          space {
+            query(first: 50) {
+              edges {
+                node {
+                  entityName
+                  properties {
+                    guid
+                    totalAppCount
+                  }
+                  relationshipsIn {
+                    isContainedIn {
+                      tanzu_tas_application(first: 100) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              state
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
               }
             }
           }
@@ -372,7 +538,8 @@ The MCP server requires these environment variables:
 If a query fails:
 
 1. Check the error message for specific field or type issues
-2. Use `tanzu_validate_query` to get suggestions
-3. Use `tanzu_explore_schema` to verify type/field names
-4. Review `troubleshooting/error-recovery.md` for common fixes
-5. Check `troubleshooting/anti-patterns.md` to avoid known issues
+2. Remember: `entityName` is at entity level, not in properties!
+3. Use `tanzu_validate_query` to get suggestions
+4. Use `tanzu_explore_schema` to verify type/field names
+5. Review `troubleshooting/error-recovery.md` for common fixes
+6. Check `troubleshooting/anti-patterns.md` to avoid known issues

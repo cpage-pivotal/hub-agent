@@ -2,82 +2,95 @@
 
 This document explains how to navigate relationships between entities in the Tanzu Platform GraphQL API.
 
-## Relationship Basics
+## CRITICAL: Relationship Field Names
 
-Every entity has two relationship fields:
-
-- **`relationshipsOut`**: Outgoing relationships (this entity points TO other entities)
-- **`relationshipsIn`**: Incoming relationships (other entities point TO this entity)
-
-## Relationship Types
-
-| Relationship | Direction | Meaning | Example |
-|--------------|-----------|---------|---------|
-| `isContainedIn` | OUT | Child → Parent | App → Space |
-| `contains` | IN | Parent → Children | Space → Apps |
-| `isAssociatedWith` | OUT | Peer association | App → Service |
-| `isDeployedBy` | OUT | Deployment relationship | Foundation → OpsManager |
-
-## Navigation Direction
-
-### Navigating UP (Child to Parent)
-
-Use `relationshipsOut` with `isContainedIn`:
+Relationships use **snake_case entity type field names**, NOT generic `contains`:
 
 ```graphql
-query NavigateUp {
-  entityQuery {
-    typed {
-      tanzu {
-        tas {
-          application {
-            query(first: 1) {
-              edges {
-                node {
-                  properties { name }
-                  relationshipsOut {
-                    isContainedIn {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Space_Type {
-                            properties { name }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
+# CORRECT - use snake_case entity type name
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application(first: 100) {  # Snake_case!
+      edges {
+        node {
+          entityName
         }
       }
     }
   }
 }
+
+# WRONG - 'contains' does not exist!
+relationshipsIn {
+  contains {  # ERROR: field doesn't exist!
+    edges { ... }
+  }
+}
 ```
+
+## Relationship Basics
+
+Every entity has two relationship fields:
+
+- **`relationshipsIn`**: Entities that ARE CONTAINED IN this entity (children)
+- **`relationshipsOut`**: Entities that this entity IS CONTAINED IN (parents)
+
+## CRITICAL: Entity Name Field
+
+**The entity name is `entityName` at the entity level, NOT `properties.name`!**
+
+```graphql
+# CORRECT
+node {
+  entityName          # This is the entity's name!
+  properties {
+    guid              # Properties has other fields
+    state
+  }
+}
+
+# WRONG - name doesn't exist on properties
+node {
+  properties {
+    name              # ERROR: field doesn't exist!
+  }
+}
+```
+
+## Relationship Types and Fields
+
+| Relationship | Direction | Meaning | Field Name Pattern |
+|--------------|-----------|---------|-------------------|
+| `isContainedIn` | IN | Children of this entity | `tanzu_tas_{entitytype}` |
+| `isContainedIn` | OUT | Parent of this entity | `tanzu_tas_{entitytype}` |
+| `isAssociatedWith` | IN/OUT | Peer associations | `tanzu_tas_{entitytype}` |
+
+## Navigation Direction
 
 ### Navigating DOWN (Parent to Children)
 
-Use `relationshipsIn` with `contains`:
+Use `relationshipsIn` with entity-specific field:
 
 ```graphql
-query NavigateDown {
+query SpaceToApps {
   entityQuery {
     typed {
       tanzu {
         tas {
           space {
-            query(first: 1) {
+            query(first: 10) {
               edges {
                 node {
-                  properties { name }
+                  entityName
                   relationshipsIn {
-                    contains {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Application_Type {
-                            properties { name state }
+                    isContainedIn {
+                      tanzu_tas_application(first: 100) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              state
+                            }
                           }
                         }
                       }
@@ -94,9 +107,72 @@ query NavigateDown {
 }
 ```
 
+### Navigating UP (Child to Parent)
+
+Use `relationshipsOut` with entity-specific field:
+
+```graphql
+query AppToSpace {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          application {
+            query(first: 10) {
+              edges {
+                node {
+                  entityName
+                  relationshipsOut {
+                    isContainedIn {
+                      tanzu_tas_space(first: 1) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              guid
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## TAS Entity Relationship Fields
+
+### Space Relationships
+
+| Direction | RelIn/RelOut Type | Field | Returns |
+|-----------|-------------------|-------|---------|
+| Children | `Entity_Tanzu_TAS_Space_IsContainedIn_RelIn` | `tanzu_tas_application` | Applications |
+| Children | `Entity_Tanzu_TAS_Space_IsContainedIn_RelIn` | `tanzu_tas_serviceinstance` | Service Instances |
+| Parent | `Entity_Tanzu_TAS_Space_IsContainedIn_RelOut` | `tanzu_tas_organization` | Organization |
+
+### Organization Relationships
+
+| Direction | Field | Returns |
+|-----------|-------|---------|
+| Children | `tanzu_tas_space` | Spaces |
+| Parent | `tanzu_tas_foundation` | Foundation |
+
+### Foundation Relationships
+
+| Direction | Field | Returns |
+|-----------|-------|---------|
+| Children | `tanzu_tas_organization` | Organizations |
+
 ## Multi-Level Navigation
 
-### Application → Foundation (3 levels up)
+### Application → Space → Organization → Foundation
 
 ```graphql
 query AppToFoundation {
@@ -105,31 +181,32 @@ query AppToFoundation {
       tanzu {
         tas {
           application {
-            query(first: 1) {
+            query(first: 5) {
               edges {
                 node {
-                  properties { name }
+                  entityName
+                  properties { state }
                   # Level 1: App → Space
                   relationshipsOut {
                     isContainedIn {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Space_Type {
-                            properties { name }
+                      tanzu_tas_space(first: 1) {
+                        edges {
+                          node {
+                            entityName
                             # Level 2: Space → Org
                             relationshipsOut {
                               isContainedIn {
-                                edges {
-                                  node {
-                                    ... on Entity_Tanzu_TAS_Organization_Type {
-                                      properties { name }
+                                tanzu_tas_organization(first: 1) {
+                                  edges {
+                                    node {
+                                      entityName
                                       # Level 3: Org → Foundation
                                       relationshipsOut {
                                         isContainedIn {
-                                          edges {
-                                            node {
-                                              ... on Entity_Tanzu_TAS_Foundation_Type {
-                                                properties { name }
+                                          tanzu_tas_foundation(first: 1) {
+                                            edges {
+                                              node {
+                                                entityName
                                               }
                                             }
                                           }
@@ -156,7 +233,7 @@ query AppToFoundation {
 }
 ```
 
-### Foundation → Applications (3 levels down)
+### Foundation → Organizations → Spaces → Applications
 
 ```graphql
 query FoundationToApps {
@@ -168,28 +245,31 @@ query FoundationToApps {
             query(first: 1) {
               edges {
                 node {
-                  properties { name }
+                  entityName
                   # Level 1: Foundation → Orgs
                   relationshipsIn {
-                    contains {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Organization_Type {
-                            properties { name }
+                    isContainedIn {
+                      tanzu_tas_organization(first: 50) {
+                        edges {
+                          node {
+                            entityName
                             # Level 2: Org → Spaces
                             relationshipsIn {
-                              contains {
-                                edges {
-                                  node {
-                                    ... on Entity_Tanzu_TAS_Space_Type {
-                                      properties { name }
+                              isContainedIn {
+                                tanzu_tas_space(first: 50) {
+                                  edges {
+                                    node {
+                                      entityName
                                       # Level 3: Space → Apps
                                       relationshipsIn {
-                                        contains {
-                                          edges {
-                                            node {
-                                              ... on Entity_Tanzu_TAS_Application_Type {
-                                                properties { name state instances }
+                                        isContainedIn {
+                                          tanzu_tas_application(first: 100) {
+                                            edges {
+                                              node {
+                                                entityName
+                                                properties {
+                                                  state
+                                                }
                                               }
                                             }
                                           }
@@ -242,31 +322,16 @@ Foundation
         └── Application (isContainedIn Space)
 ```
 
-## Common Navigation Patterns
+## Quick Reference: Relationship Fields
 
-| From | To | Path | Relationship Chain |
-|------|-----|------|-------------------|
-| App | Space | 1 step | `relationshipsOut.isContainedIn` |
-| App | Org | 2 steps | App → Space → Org |
-| App | Foundation | 3 steps | App → Space → Org → Foundation |
-| Foundation | Apps | 3 steps | Foundation → Org → Space → App |
-| Space | Apps | 1 step | `relationshipsIn.contains` |
-| Org | Spaces | 1 step | `relationshipsIn.contains` |
-
-## Inline Fragments
-
-When navigating relationships, use inline fragments to access type-specific fields:
-
-```graphql
-... on Entity_Tanzu_TAS_Application_Type {
-  properties {
-    name
-    state
-  }
-}
-```
-
-The fragment syntax is required because relationship edges can contain multiple entity types.
+| From | To | Direction | Path |
+|------|----|-----------|------|
+| Space | Applications | DOWN | `relationshipsIn.isContainedIn.tanzu_tas_application` |
+| Space | Organization | UP | `relationshipsOut.isContainedIn.tanzu_tas_organization` |
+| Organization | Spaces | DOWN | `relationshipsIn.isContainedIn.tanzu_tas_space` |
+| Organization | Foundation | UP | `relationshipsOut.isContainedIn.tanzu_tas_foundation` |
+| Foundation | Organizations | DOWN | `relationshipsIn.isContainedIn.tanzu_tas_organization` |
+| Application | Space | UP | `relationshipsOut.isContainedIn.tanzu_tas_space` |
 
 ## Performance Considerations
 
@@ -277,55 +342,63 @@ The fragment syntax is required because relationship edges can contain multiple 
 
 ## Common Mistakes
 
-### Wrong relationship direction
+### Wrong relationship field (contains doesn't exist)
 
 ```graphql
-# WRONG - isContainedIn is for going UP, not down
+# WRONG - 'contains' doesn't exist
 relationshipsIn {
-  isContainedIn { ... }  # This doesn't make sense
+  contains { ... }  # ERROR!
 }
 
-# CORRECT - Use contains for going down
+# CORRECT - use snake_case entity type name
 relationshipsIn {
-  contains { ... }
-}
-```
-
-### Wrong relationship field case
-
-```graphql
-# WRONG - Relationship fields are camelCase
-relationshipsOut {
-  IsContainedIn { ... }  # Capital I is wrong
-}
-
-# CORRECT
-relationshipsOut {
-  isContainedIn { ... }
-}
-```
-
-### Missing inline fragment
-
-```graphql
-# WRONG - Can't directly access properties
-relationshipsOut {
   isContainedIn {
-    edges {
-      node {
-        properties { name }  # Error: node could be any type
+    tanzu_tas_application(first: 100) { ... }
+  }
+}
+```
+
+### Wrong property field (name doesn't exist on properties)
+
+```graphql
+# WRONG - name doesn't exist on properties types
+node {
+  properties { name }  # ERROR!
+}
+
+# CORRECT - entityName is at entity level
+node {
+  entityName
+  properties { guid state }
+}
+```
+
+### Using inline fragments (not needed)
+
+```graphql
+# WRONG - inline fragments not needed for relationship fields
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application {
+      edges {
+        node {
+          ... on Entity_Tanzu_TAS_Application_Type {  # Unnecessary!
+            entityName
+          }
+        }
       }
     }
   }
 }
 
-# CORRECT - Use inline fragment
-relationshipsOut {
+# CORRECT - relationship fields return typed connections
+relationshipsIn {
   isContainedIn {
-    edges {
-      node {
-        ... on Entity_Tanzu_TAS_Space_Type {
-          properties { name }
+    tanzu_tas_application(first: 100) {
+      edges {
+        node {
+          entityName
+          properties { state }
         }
       }
     }

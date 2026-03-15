@@ -2,6 +2,10 @@
 
 This document provides practical examples of using the TanzuGraphQLService for common operations.
 
+> **⚠️ Important:** Before using these examples, read [schema-learnings.md](schema-learnings.md) to understand critical API patterns:
+> - Entity names use `entityName` at entity level, NOT `properties.name`
+> - Relationship navigation uses `tanzu_tas_{entity}` fields, NOT generic `contains`
+
 ---
 
 ## Basic Query Execution
@@ -25,9 +29,6 @@ public void listFoundations() {
                           id
                           entityId
                           entityName
-                          properties {
-                            name
-                          }
                         }
                       }
                       pageInfo {
@@ -78,16 +79,12 @@ public void findFoundationByName(String foundationName) {
                   foundation {
                     query(
                       first: 1
-                      filter: { property: "name", value: $name }
+                      filter: { property: "entityName", value: $name }
                     ) {
                       edges {
                         node {
                           id
-                          properties {
-                            name
-                            apiUrl
-                            version
-                          }
+                          entityName
                         }
                       }
                     }
@@ -135,9 +132,10 @@ public List<Map<String, Object>> getAllApplications() {
                           edges {
                             node {
                               id
+                              entityName
                               properties {
-                                name
                                 state
+                                health_status
                               }
                             }
                           }
@@ -296,9 +294,9 @@ public void getTypeDetails(String typeName) {
         fields.forEach(field -> {
             String fieldName = (String) field.get("name");
             Map<String, Object> fieldType = (Map<String, Object>) field.get("type");
-            String typeName = extractTypeName(fieldType);
+            String typeName2 = extractTypeName(fieldType);
             
-            System.out.println("  " + fieldName + ": " + typeName);
+            System.out.println("  " + fieldName + ": " + typeName2);
         });
     }
 }
@@ -557,43 +555,56 @@ logging:
 
 ## Common Patterns
 
-### Entity Relationship Traversal
+### Entity Relationship Traversal (Correct Pattern)
+
+> **Important:** Use snake_case entity type fields for relationships, NOT inline fragments with `edges/node`.
+
 ```java
-public void getApplicationWithFoundation(String appId) {
+public void getApplicationWithSpace(String appId) {
+    // CORRECT: Use tanzu_tas_{entity} fields for relationship navigation
     String query = """
-        query GetAppWithFoundation($appId: ID!) {
+        query GetAppWithSpace {
           entityQuery {
             typed {
               tanzu {
                 tas {
                   application {
-                    query(filter: { id: $appId }) {
+                    query(first: 10) {
                       edges {
                         node {
                           id
-                          properties { name state }
+                          entityName
+                          properties {
+                            state
+                            health_status
+                          }
                           
-                          # Traverse up to foundation
+                          # Navigate to parent Space
                           relationshipsOut {
                             isContainedIn {
-                              edges {
-                                node {
-                                  ... on Entity_Tanzu_TAS_Space_Type {
-                                    properties { name }
+                              tanzu_tas_space(first: 1) {
+                                edges {
+                                  node {
+                                    entityName
+                                    properties {
+                                      guid
+                                    }
                                     
+                                    # Navigate to parent Organization
                                     relationshipsOut {
                                       isContainedIn {
-                                        edges {
-                                          node {
-                                            ... on Entity_Tanzu_TAS_Organization_Type {
-                                              properties { name }
+                                        tanzu_tas_organization(first: 1) {
+                                          edges {
+                                            node {
+                                              entityName
                                               
+                                              # Navigate to parent Foundation
                                               relationshipsOut {
                                                 isContainedIn {
-                                                  edges {
-                                                    node {
-                                                      ... on Entity_Tanzu_TAS_Foundation_Type {
-                                                        properties { name }
+                                                  tanzu_tas_foundation(first: 1) {
+                                                    edges {
+                                                      node {
+                                                        entityName
                                                       }
                                                     }
                                                   }
@@ -620,11 +631,8 @@ public void getApplicationWithFoundation(String appId) {
         }
         """;
     
-    Map<String, Object> variables = Map.of("appId", appId);
-    
     GraphQLRequest request = GraphQLRequest.builder()
             .query(query)
-            .variables(variables)
             .build();
     
     GraphQLResponse response = graphQLService.executeQuery(request);
@@ -632,22 +640,102 @@ public void getApplicationWithFoundation(String appId) {
 }
 ```
 
+### Spaces with Applications (Parent to Children)
+
+```java
+public void getSpacesWithApps() {
+    // CORRECT: Use tanzu_tas_application for navigating from Space to Applications
+    String query = """
+        query SpacesWithApps {
+          entityQuery {
+            typed {
+              tanzu {
+                tas {
+                  space {
+                    query(first: 100) {
+                      edges {
+                        node {
+                          entityName
+                          properties {
+                            guid
+                            totalAppCount
+                          }
+                          
+                          # Navigate to child Applications
+                          relationshipsIn {
+                            isContainedIn {
+                              tanzu_tas_application(first: 100) {
+                                edges {
+                                  node {
+                                    entityName
+                                    properties {
+                                      state
+                                      health_status
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+        """;
+    
+    GraphQLRequest request = GraphQLRequest.builder()
+            .query(query)
+            .build();
+    
+    GraphQLResponse response = graphQLService.executeQuery(request);
+    // Process response - useful for "find spaces with stopped apps"
+}
+```
+
 ---
 
 ## Best Practices
 
-1. **Always validate before execution**: The service validates syntax automatically
-2. **Handle errors gracefully**: Check `response.hasErrors()` before processing data
-3. **Use variables for dynamic values**: Don't concatenate strings into queries
-4. **Request only needed fields**: Reduces response size and improves performance
-5. **Monitor complexity**: Check `response.getQueryComplexity()` for large queries
-6. **Use pagination**: Don't fetch all data at once for large result sets
-7. **Log appropriately**: Use DEBUG for queries, WARN for retries, ERROR for failures
-8. **Configure timeouts**: Adjust based on your query complexity needs
+1. **Use `entityName` for names**: Entity names are at entity level, NOT `properties.name`
+2. **Use snake_case for relationships**: Use `tanzu_tas_application`, NOT `contains`
+3. **Always validate before execution**: The service validates syntax automatically
+4. **Handle errors gracefully**: Check `response.hasErrors()` before processing data
+5. **Use variables for dynamic values**: Don't concatenate strings into queries
+6. **Request only needed fields**: Reduces response size and improves performance
+7. **Monitor complexity**: Check `response.getQueryComplexity()` for large queries
+8. **Use pagination**: Don't fetch all data at once for large result sets
+9. **Log appropriately**: Use DEBUG for queries, WARN for retries, ERROR for failures
+10. **Configure timeouts**: Adjust based on your query complexity needs
 
 ---
 
 ## Troubleshooting
+
+### "Cannot query field 'name' on type '*_Properties'"
+**Problem**: Using `properties.name` which doesn't exist.
+**Solution**: Use `entityName` at the entity level:
+```graphql
+node {
+  entityName           # Correct!
+  properties { state } # Properties has other fields, not name
+}
+```
+
+### "Cannot query field 'contains' on type '*_RelIn'"
+**Problem**: Using generic `contains` field which doesn't exist.
+**Solution**: Use snake_case entity type fields:
+```graphql
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application(first: 100) { ... }  # Correct!
+  }
+}
+```
 
 ### Query Syntax Errors
 ```
@@ -684,5 +772,8 @@ HTTP 429: Too Many Requests
 
 ---
 
-For more examples, see the MCP tool implementations in `hub-mcp/src/main/java/org/tanzu/hubmcp/tools/`.
+## See Also
 
+- [schema-learnings.md](schema-learnings.md) - Critical API patterns
+- [implementation-status.md](implementation-status.md) - Project status
+- MCP tool implementations in `hub-mcp/src/main/java/org/tanzu/hubmcp/tools/`

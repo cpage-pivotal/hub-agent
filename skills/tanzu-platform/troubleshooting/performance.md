@@ -2,6 +2,42 @@
 
 This document describes how to keep queries efficient and avoid performance issues.
 
+## ⚠️ CRITICAL: Response Size Management
+
+Large responses can exceed token limits and cause tool failures. **Always choose the most efficient pattern for the question type.**
+
+### Efficiency Patterns (Use for Aggregation Questions)
+
+| Pattern | Use Case | Response Size |
+|---------|----------|---------------|
+| `count_stopped_apps_by_space` | "Spaces with N stopped apps?" | **Small** - returns counts |
+| `summarize_app_states` | "How many apps are stopped?" | **Small** - returns distribution |
+| `spaces_summary` | "List all spaces" | **Medium** - no nested apps |
+
+### Detail Patterns (Use Only When Needed)
+
+| Pattern | Use Case | Response Size |
+|---------|----------|---------------|
+| `spaces_with_apps` | "Show all apps with full details" | **⚠️ LARGE** - nested data |
+| `list_applications` | "List all applications" | **Medium-Large** |
+
+### Example: Choosing the Right Pattern
+
+**Question:** "Are there any spaces with more than 2 stopped apps?"
+
+❌ **WRONG:** `spaces_with_apps` → Returns ALL spaces with ALL their apps (186K+ chars!)
+
+✅ **CORRECT:** `count_stopped_apps_by_space` → Returns pre-computed counts (~5K chars)
+
+The response includes `insights.spacesWithMoreThan2StoppedApps` which directly answers the question!
+
+### Auto-Summarization
+
+If a response exceeds 50K characters, the MCP server will auto-summarize it. To avoid this:
+1. Use efficiency patterns for aggregation questions
+2. Add `{"summarize": true}` to parameters if you only need counts
+3. Use smaller `first` values when possible
+
 ## Query Complexity
 
 The Tanzu Platform API tracks query complexity. High complexity queries may:

@@ -2,9 +2,131 @@
 
 This document describes common query patterns that should be avoided.
 
+## CRITICAL Anti-Patterns (Most Common Mistakes)
+
+### 1. Using `properties.name` (WRONG)
+
+```graphql
+# ANTI-PATTERN: name field doesn't exist on properties!
+query {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          space {
+            query(first: 10) {
+              edges {
+                node {
+                  properties {
+                    name  # WRONG! This field doesn't exist!
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Why it's wrong**: The `name` field does NOT exist on `*_Properties` types. Entity names are at the entity level.
+
+**Correct pattern**:
+```graphql
+node {
+  entityName           # Name is at entity level!
+  properties {
+    guid               # Properties has guid, state, etc.
+    state
+  }
+}
+```
+
+### 2. Using Generic `contains` Field (WRONG)
+
+```graphql
+# ANTI-PATTERN: 'contains' field doesn't exist!
+query {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          space {
+            query(first: 10) {
+              edges {
+                node {
+                  relationshipsIn {
+                    contains {  # WRONG! This field doesn't exist!
+                      edges { ... }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+**Why it's wrong**: Relationships use snake_case entity type names, not generic `contains`.
+
+**Correct pattern**:
+```graphql
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application(first: 100) {  # Use snake_case entity type!
+      edges {
+        node {
+          entityName
+        }
+      }
+    }
+  }
+}
+```
+
+### 3. Using Inline Fragments on Relationships (WRONG)
+
+```graphql
+# ANTI-PATTERN: Fragments not needed for typed relationship fields
+relationshipsOut {
+  isContainedIn {
+    edges {
+      node {
+        ... on Entity_Tanzu_TAS_Space_Type {  # Wrong place!
+          entityName
+        }
+      }
+    }
+  }
+}
+```
+
+**Why it's wrong**: Relationship fields return typed connections. Use the entity-specific field instead.
+
+**Correct pattern**:
+```graphql
+relationshipsOut {
+  isContainedIn {
+    tanzu_tas_space(first: 1) {
+      edges {
+        node {
+          entityName
+        }
+      }
+    }
+  }
+}
+```
+
 ## Query Structure Anti-Patterns
 
-### 1. Direct Entity Type Query (WRONG)
+### 4. Direct Entity Type Query (WRONG)
 
 ```graphql
 # ANTI-PATTERN: Querying entity types directly
@@ -38,7 +160,7 @@ query {
 }
 ```
 
-### 2. Uppercase Domain Names (WRONG)
+### 5. Uppercase Domain Names (WRONG)
 
 ```graphql
 # ANTI-PATTERN: Uppercase domains
@@ -66,7 +188,7 @@ tanzu {
 }
 ```
 
-### 3. Missing Type Suffix in Fragments (WRONG)
+### 6. Missing Type Suffix in Fragments (WRONG)
 
 ```graphql
 # ANTI-PATTERN: Missing _Type suffix
@@ -84,51 +206,7 @@ tanzu {
 }
 ```
 
-### 4. Wrong Relationship Direction (WRONG)
-
-```graphql
-# ANTI-PATTERN: Using isContainedIn for parent-to-child
-query {
-  entityQuery {
-    typed {
-      tanzu {
-        tas {
-          foundation {
-            query(first: 1) {
-              edges {
-                node {
-                  relationshipsIn {
-                    isContainedIn {  # Wrong direction!
-                      ...
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-**Why it's wrong**: `isContainedIn` is for child→parent, not parent→children.
-
-**Correct pattern**:
-```graphql
-# For parent to children: use relationshipsIn.contains
-relationshipsIn {
-  contains { ... }
-}
-
-# For child to parent: use relationshipsOut.isContainedIn
-relationshipsOut {
-  isContainedIn { ... }
-}
-```
-
-### 5. PascalCase Relationship Fields (WRONG)
+### 7. PascalCase Relationship Fields (WRONG)
 
 ```graphql
 # ANTI-PATTERN: Wrong case for relationship field
@@ -152,7 +230,7 @@ relationshipsOut {
 
 ## Performance Anti-Patterns
 
-### 6. Requesting All Fields (WRONG)
+### 8. Requesting All Fields (WRONG)
 
 ```graphql
 # ANTI-PATTERN: Selecting all possible fields
@@ -169,20 +247,9 @@ query {
                   entityId
                   entityName
                   entityType
-                  createdAt
-                  updatedAt
-                  version
                   properties {
-                    name
                     state
-                    instances
-                    memory
-                    disk_quota
-                    buildpack
-                    stack
-                    detected_start_command
-                    health_check_type
-                    health_check_timeout
+                    instanceCount
                     # ... every possible field
                   }
                   tags { key value }
@@ -203,7 +270,7 @@ query {
 
 **Correct pattern**: Request only needed fields.
 
-### 7. Deep Nesting Without Pagination (WRONG)
+### 9. Deep Nesting Without Pagination (WRONG)
 
 ```graphql
 # ANTI-PATTERN: Deep traversal without limits
@@ -217,15 +284,9 @@ query {
               edges {
                 node {
                   relationshipsIn {
-                    contains {  # No pagination!
-                      edges {
-                        node {
-                          relationshipsIn {
-                            contains {  # No pagination!
-                              edges { ... }
-                            }
-                          }
-                        }
+                    isContainedIn {
+                      tanzu_tas_organization {  # No pagination!
+                        edges { ... }
                       }
                     }
                   }
@@ -242,9 +303,9 @@ query {
 
 **Why it's wrong**: Can return massive results, timeout, or exceed complexity limits.
 
-**Correct pattern**: Add pagination at each level.
+**Correct pattern**: Add pagination at each level with `first: N`.
 
-### 8. No Pagination (WRONG)
+### 10. No Pagination (WRONG)
 
 ```graphql
 # ANTI-PATTERN: Missing first/after arguments
@@ -280,7 +341,7 @@ query(first: 50) {
 
 ## Validation Anti-Patterns
 
-### 9. Skipping Validation (WRONG)
+### 11. Skipping Validation (WRONG)
 
 ```
 # ANTI-PATTERN: Execute without validation
@@ -299,7 +360,7 @@ tanzu_validate_query(query: "...")
 tanzu_graphql_query(query: "...")
 ```
 
-### 10. Ignoring Validation Suggestions (WRONG)
+### 12. Ignoring Validation Suggestions (WRONG)
 
 When `tanzu_validate_query` returns suggestions, ignoring them wastes time.
 
@@ -307,7 +368,7 @@ When `tanzu_validate_query` returns suggestions, ignoring them wastes time.
 
 ## Mutation Anti-Patterns
 
-### 11. Destructive Mutations Without Confirmation (WRONG)
+### 13. Destructive Mutations Without Confirmation (WRONG)
 
 ```
 # ANTI-PATTERN: Delete without confirmation
@@ -327,25 +388,9 @@ tanzu_graphql_mutate(
 )
 ```
 
-### 12. Inline Sensitive Data (WRONG)
-
-```graphql
-# ANTI-PATTERN: Hardcoded values
-mutation {
-  createNotificationTarget(input: {
-    name: "Slack",
-    webhook: "https://hooks.slack.com/secret-token"
-  }) { ... }
-}
-```
-
-**Why it's wrong**: Exposes sensitive data in logs and history.
-
-**Correct pattern**: Use variables for sensitive data.
-
 ## Schema Exploration Anti-Patterns
 
-### 13. Requesting Full Schema (WRONG)
+### 14. Requesting Full Schema (WRONG)
 
 ```
 # ANTI-PATTERN: No filtering
@@ -363,7 +408,7 @@ tanzu_explore_schema(
 )
 ```
 
-### 14. Guessing Type Names (WRONG)
+### 15. Guessing Type Names (WRONG)
 
 Instead of guessing type names, use schema exploration:
 
@@ -376,17 +421,28 @@ tanzu_explore_schema(search: "application", domain: "TAS")
 # Then use discovered type name
 ```
 
-## Summary
+## Quick Reference
 
 | Anti-Pattern | Correct Approach |
 |--------------|------------------|
+| `properties.name` | Use `entityName` at entity level |
+| `relationshipsIn.contains` | Use `relationshipsIn.isContainedIn.tanzu_tas_{entity}` |
+| Inline fragments on relationships | Use entity-specific fields directly |
 | Direct entity type query | Use typed query hierarchy |
 | Uppercase domains | Use lowercase in query paths |
 | Missing `_Type` suffix | Always include suffix |
-| Wrong relationship direction | Match direction to navigation |
-| PascalCase relationship fields | Use camelCase |
+| PascalCase relationship fields | Use camelCase (`isContainedIn`) |
 | Requesting all fields | Request only needed fields |
 | Deep nesting without pagination | Add pagination at each level |
 | Skipping validation | Always validate first |
 | Mutations without confirmation | Require confirmation for destructive ops |
-| Full schema requests | Use domain/search filters |
+
+## Relationship Field Quick Reference
+
+| To Get | Correct Field |
+|--------|---------------|
+| Applications | `tanzu_tas_application` |
+| Spaces | `tanzu_tas_space` |
+| Organizations | `tanzu_tas_organization` |
+| Foundations | `tanzu_tas_foundation` |
+| Service Instances | `tanzu_tas_serviceinstance` |

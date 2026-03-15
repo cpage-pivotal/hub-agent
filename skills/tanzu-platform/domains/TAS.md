@@ -27,30 +27,88 @@ Foundation
 | BOSH Director | `Entity_Tanzu_TAS_BOSHDirector_Type` | Infrastructure manager |
 | Ops Manager | `Entity_Tanzu_TAS_OpsManager_Type` | Tile management |
 
-## Common Properties
+## CRITICAL: Entity Name Field
 
-### Foundation Properties
-- `name` - Foundation name
-- `api_endpoint` - Cloud Controller API URL
-- `version` - TAS version
+**The entity name is `entityName` at the entity level, NOT `properties.name`!**
 
-### Organization Properties
-- `name` - Organization name
-- `quota` - Quota definition
+```graphql
+# CORRECT
+node {
+  entityName          # This is the entity's name!
+  properties {
+    guid              # Properties has guid, state, etc.
+  }
+}
 
-### Space Properties
-- `name` - Space name
-- `organization` - Parent organization
+# WRONG - name doesn't exist on properties
+node {
+  properties {
+    name              # ERROR: field doesn't exist!
+  }
+}
+```
 
-### Application Properties
-- `name` - Application name
-- `state` - Running state (STARTED, STOPPED)
-- `instances` - Number of instances
-- `memory` - Memory allocation (MB)
-- `disk_quota` - Disk quota (MB)
-- `buildpack` - Buildpack used
-- `stack` - Stack name
-- `detected_start_command` - Start command
+## Common Entity Fields (on all TAS entities)
+
+```graphql
+node {
+  id                  # Opaque global ID
+  entityId            # Canonical entity identifier
+  entityName          # Human-readable name (THE NAME!)
+  entityType          # Type discriminator
+  properties { ... }  # Type-specific properties
+  relationshipsIn { ... }
+  relationshipsOut { ... }
+  tags { key value }
+}
+```
+
+## Application Properties
+
+`Entity_Tanzu_TAS_Application_Properties`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `guid` | String | Application GUID |
+| `state` | String | `STARTED` or `STOPPED` |
+| `health_status` | String | `RUNNING`, `DOWN`, or `STOPPED` |
+| `instanceCount` | Int | Desired instances |
+| `runningInstanceCount` | Int | Running instances |
+| `crashedInstanceCount` | Int | Crashed instances |
+| `buildpack` | String | Buildpack name |
+| `buildpackType` | String | Buildpack type |
+| `spaceGUID` | String | Parent space GUID |
+| `foundation` | String | Foundation name |
+| `routes` | [String] | Application routes |
+| `totalMemoryLimitMB` | Int | Memory limit (MB) |
+| `stack` | String | Root filesystem |
+| `springApp` | Boolean | Is Spring Boot app? |
+| `sbomPresent` | Boolean | Has SBOM? |
+
+## Space Properties
+
+`Entity_Tanzu_TAS_Space_Properties`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `guid` | String | Space GUID |
+| `foundation` | String | Foundation name |
+| `organizationGUID` | String | Parent organization GUID |
+| `totalAppCount` | Int | Number of applications |
+| `totalMemoryLimitMB` | Int | Memory used (MB) |
+| `totalMemoryQuotaMB` | Int | Memory quota (MB) |
+| `totalInstancesQuota` | Int | Instance quota |
+| `totalServiceInstanceCount` | Int | Service instances |
+| `totalRoutesQuota` | Int | Routes quota |
+
+## Organization Properties
+
+`Entity_Tanzu_TAS_Organization_Properties`:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `guid` | String | Organization GUID |
+| `foundation` | String | Foundation name |
 
 ## Common Queries
 
@@ -67,9 +125,7 @@ query ListFoundations {
               edges {
                 node {
                   id
-                  properties {
-                    name
-                  }
+                  entityName
                 }
               }
             }
@@ -81,44 +137,7 @@ query ListFoundations {
 }
 ```
 
-### List Organizations in Foundation
-
-Use relationship navigation from Foundation:
-
-```graphql
-query FoundationOrgs {
-  entityQuery {
-    typed {
-      tanzu {
-        tas {
-          foundation {
-            query(first: 10) {
-              edges {
-                node {
-                  properties { name }
-                  relationshipsIn {
-                    contains {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Organization_Type {
-                            properties { name }
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-### List Applications
+### List Applications with State
 
 ```graphql
 query ListApplications {
@@ -131,11 +150,12 @@ query ListApplications {
               edges {
                 node {
                   id
+                  entityName
                   properties {
-                    name
                     state
-                    instances
-                    memory
+                    health_status
+                    instanceCount
+                    runningInstanceCount
                   }
                 }
               }
@@ -152,9 +172,146 @@ query ListApplications {
 }
 ```
 
-### Find Application's Foundation
+### Find Stopped Applications
 
-Navigate up the hierarchy:
+```graphql
+query FindStoppedApps {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          application {
+            query(first: 100) {
+              edges {
+                node {
+                  entityName
+                  properties {
+                    state
+                    health_status
+                    spaceGUID
+                    foundation
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+# Filter client-side for state = "STOPPED"
+```
+
+### Spaces with Their Applications
+
+This is the CORRECT way to get applications within spaces:
+
+```graphql
+query SpacesWithApps {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          space {
+            query(first: 100) {
+              edges {
+                node {
+                  entityName
+                  properties {
+                    guid
+                    totalAppCount
+                  }
+                  relationshipsIn {
+                    isContainedIn {
+                      tanzu_tas_application(first: 100) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              state
+                              health_status
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+### Application to Space Navigation
+
+Navigate from application up to its space:
+
+```graphql
+query AppToSpace {
+  entityQuery {
+    typed {
+      tanzu {
+        tas {
+          application {
+            query(first: 10) {
+              edges {
+                node {
+                  entityName
+                  properties {
+                    state
+                  }
+                  relationshipsOut {
+                    isContainedIn {
+                      tanzu_tas_space(first: 1) {
+                        edges {
+                          node {
+                            entityName
+                            properties {
+                              guid
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+## Relationship Navigation
+
+### CRITICAL: Use snake_case Entity Field Names
+
+Relationships do NOT use generic `contains` - they use **snake_case entity type names**:
+
+| From | To | Path |
+|------|----|------|
+| Space | Applications | `relationshipsIn.isContainedIn.tanzu_tas_application` |
+| Organization | Spaces | `relationshipsIn.isContainedIn.tanzu_tas_space` |
+| Foundation | Organizations | `relationshipsIn.isContainedIn.tanzu_tas_organization` |
+| Application | Space | `relationshipsOut.isContainedIn.tanzu_tas_space` |
+| Space | Organization | `relationshipsOut.isContainedIn.tanzu_tas_organization` |
+| Organization | Foundation | `relationshipsOut.isContainedIn.tanzu_tas_foundation` |
+
+### Relationship Direction
+
+- **`relationshipsIn`**: Entities contained IN this entity (children)
+- **`relationshipsOut`**: Entity this is contained IN (parent)
+
+### Multi-Level Navigation: Application to Foundation
 
 ```graphql
 query AppToFoundation {
@@ -163,28 +320,32 @@ query AppToFoundation {
       tanzu {
         tas {
           application {
-            query(first: 1) {
+            query(first: 5) {
               edges {
                 node {
-                  properties { name }
+                  entityName
+                  properties { state }
+                  # App → Space
                   relationshipsOut {
                     isContainedIn {
-                      edges {
-                        node {
-                          ... on Entity_Tanzu_TAS_Space_Type {
-                            properties { name }
+                      tanzu_tas_space(first: 1) {
+                        edges {
+                          node {
+                            entityName
+                            # Space → Organization
                             relationshipsOut {
                               isContainedIn {
-                                edges {
-                                  node {
-                                    ... on Entity_Tanzu_TAS_Organization_Type {
-                                      properties { name }
+                                tanzu_tas_organization(first: 1) {
+                                  edges {
+                                    node {
+                                      entityName
+                                      # Org → Foundation
                                       relationshipsOut {
                                         isContainedIn {
-                                          edges {
-                                            node {
-                                              ... on Entity_Tanzu_TAS_Foundation_Type {
-                                                properties { name }
+                                          tanzu_tas_foundation(first: 1) {
+                                            edges {
+                                              node {
+                                                entityName
                                               }
                                             }
                                           }
@@ -211,15 +372,10 @@ query AppToFoundation {
 }
 ```
 
-## Relationship Types
-
-| Relationship | Direction | From | To | Use Case |
-|--------------|-----------|------|-----|----------|
-| `isContainedIn` | OUT | Child | Parent | Navigate to parent |
-| `contains` | IN | Parent | Children | List children |
-
 ## Notes
 
 - Application `state` values: `STARTED`, `STOPPED`
-- Memory and disk_quota are in MB
+- Application `health_status` values: `RUNNING`, `DOWN`, `STOPPED`
+- Memory and disk quota are in MB
 - Use pagination for large result sets
+- Entity name is `entityName`, NOT `properties.name`

@@ -10,9 +10,118 @@ This document describes common errors and how to recover from them.
 4. **Authentication Errors** - Token or permission issues
 5. **Network Errors** - Connection problems
 
-## Common Errors and Fixes
+## MOST COMMON ERRORS
 
-### 1. Unknown Field Error
+### ERROR: Cannot query field "name" on type "*_Properties"
+
+**Error Message**:
+```json
+{
+  "errors": [{
+    "message": "Cannot query field \"name\" on type \"Entity_Tanzu_TAS_Space_Properties\"."
+  }]
+}
+```
+
+**Cause**: Trying to use `properties.name` - this field does NOT exist!
+
+**Fix**: Entity names are at the entity level, not in properties:
+```graphql
+# WRONG
+node {
+  properties {
+    name  # This doesn't exist!
+  }
+}
+
+# CORRECT - entityName is at entity level
+node {
+  entityName           # This is the entity's name!
+  properties {
+    guid               # Properties has guid, state, etc.
+    state
+  }
+}
+```
+
+### ERROR: Cannot query field "contains" on type "*_RelOut"
+
+**Error Message**:
+```json
+{
+  "errors": [{
+    "message": "Cannot query field \"contains\" on type \"Entity_Tanzu_TAS_Space_RelOut\"."
+  }]
+}
+```
+
+**Cause**: Using generic `contains` field which doesn't exist. Relationships use snake_case entity type names.
+
+**Fix**: Use the correct entity-specific relationship field:
+```graphql
+# WRONG
+relationshipsIn {
+  contains {  # This doesn't exist!
+    edges { ... }
+  }
+}
+
+# CORRECT - use snake_case entity type name
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application(first: 100) {  # Use entity type name!
+      edges {
+        node {
+          entityName
+        }
+      }
+    }
+  }
+}
+```
+
+### ERROR: Fragment cannot be spread here
+
+**Error Message**:
+```json
+{
+  "errors": [{
+    "message": "Fragment cannot be spread here as objects of type \"*_RelOut\" can never be of type \"Entity_Tanzu_*_Type\"."
+  }]
+}
+```
+
+**Cause**: Using inline fragments on relationship types that don't need them.
+
+**Fix**: Relationship fields return typed connections, no fragments needed:
+```graphql
+# WRONG - fragments not needed here
+relationshipsIn {
+  isContainedIn {
+    ... on Entity_Tanzu_TAS_Application_Type {  # Wrong place!
+      entityName
+    }
+  }
+}
+
+# CORRECT - use the entity-specific field directly
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application(first: 100) {
+      edges {
+        node {
+          entityName
+          properties { state }
+        }
+      }
+    }
+  }
+}
+```
+
+## Other Common Errors
+
+### Unknown Field Error
 
 **Error Message**:
 ```json
@@ -31,9 +140,9 @@ This document describes common errors and how to recover from them.
    tanzu_explore_schema(typeName: "Entity_Tanzu_TAS_Application_Properties")
    ```
 2. Check for typos in field names
-3. Look for "did you mean" suggestions from `tanzu_validate_query`
+3. Remember: `entityName` is at entity level, not properties!
 
-### 2. Unknown Type Error
+### Unknown Type Error
 
 **Error Message**:
 ```json
@@ -51,7 +160,7 @@ This document describes common errors and how to recover from them.
 2. Check type naming conventions in `reference/type-naming.md`
 3. Use `tanzu_explore_schema` to find correct type name
 
-### 3. Invalid Query Structure
+### Invalid Query Structure
 
 **Error Message**:
 ```json
@@ -72,7 +181,13 @@ query {
       tanzu {
         tas {
           foundation {
-            query(first: 10) { ... }
+            query(first: 10) {
+              edges {
+                node {
+                  entityName
+                }
+              }
+            }
           }
         }
       }
@@ -81,7 +196,7 @@ query {
 }
 ```
 
-### 4. Case Sensitivity Error
+### Case Sensitivity Error
 
 **Error Message**:
 ```json
@@ -103,7 +218,7 @@ tanzu { TAS { ... } }
 tanzu { tas { ... } }
 ```
 
-### 5. Missing Required Argument
+### Missing Required Argument
 
 **Error Message**:
 ```json
@@ -121,7 +236,7 @@ tanzu { tas { ... } }
 query(first: 10) { ... }
 ```
 
-### 6. Authentication Error
+### Authentication Error
 
 **Error Message**:
 ```json
@@ -139,25 +254,7 @@ query(first: 10) { ... }
 2. Verify token is not expired
 3. Ensure token has correct permissions
 
-### 7. Authorization Error
-
-**Error Message**:
-```json
-{
-  "errors": [{
-    "message": "Not authorized to access this resource"
-  }]
-}
-```
-
-**Cause**: Token lacks required permissions.
-
-**Fix**:
-1. Verify user has access to the resource
-2. Check organization/space permissions
-3. Request elevated permissions if needed
-
-### 8. Query Complexity Exceeded
+### Query Complexity Exceeded
 
 **Error Message**:
 ```json
@@ -176,7 +273,7 @@ query(first: 10) { ... }
 3. Break into multiple smaller queries
 4. Avoid deep nesting
 
-### 9. Timeout Error
+### Timeout Error
 
 **Error Message**:
 ```json
@@ -195,32 +292,24 @@ query(first: 10) { ... }
 3. Use pagination with smaller page sizes
 4. Simplify relationship traversal
 
-### 10. Network/Connection Error
-
-**Error Message**:
-```
-Connection refused: https://tanzu-hub.kuhn-labs.com/hub/graphql
-```
-
-**Cause**: Cannot reach the Tanzu Platform API.
-
-**Fix**:
-1. Check network connectivity
-2. Verify `TANZU_PLATFORM_URL` is correct
-3. Check for firewall/proxy issues
-4. Verify the service is running
-
 ## Error Recovery Workflow
 
 ### Step 1: Identify Error Type
 
 Read the error message carefully:
-- "Field not found" → Field name issue
+- "Field not found" → Field name issue (check if using `properties.name`)
+- "Cannot query field contains" → Use entity-specific field like `tanzu_tas_application`
 - "Unknown type" → Type name issue
 - "Not authenticated" → Token issue
 - "Timeout" → Performance issue
 
-### Step 2: Use Validation
+### Step 2: Check the Most Common Mistakes
+
+1. **Are you using `properties.name`?** → Use `entityName` at entity level
+2. **Are you using `contains`?** → Use `tanzu_tas_{entity}` fields
+3. **Are you using inline fragments on relationships?** → Use entity-specific fields
+
+### Step 3: Use Validation
 
 Before fixing, validate the corrected query:
 ```
@@ -230,7 +319,7 @@ tanzu_validate_query(
 )
 ```
 
-### Step 3: Check Schema
+### Step 4: Check Schema
 
 Use schema exploration to verify names:
 ```
@@ -240,11 +329,13 @@ tanzu_explore_schema(
 )
 ```
 
-### Step 4: Try Common Patterns
+### Step 5: Try Common Patterns
 
 Reference working patterns in `patterns/common-queries.md`.
 
-### Step 5: Simplify and Build Up
+The `spaces_with_apps` pattern is especially useful for questions about spaces and their applications.
+
+### Step 6: Simplify and Build Up
 
 If a complex query fails:
 1. Start with simplest possible query
@@ -252,29 +343,46 @@ If a complex query fails:
 3. Add complexity incrementally
 4. Identify which addition causes failure
 
-## Self-Correction with tanzu_validate_query
+## Quick Reference: Correct Patterns
 
-The `tanzu_validate_query` tool provides "did you mean" suggestions:
-
-```json
-{
-  "valid": false,
-  "errors": [{
-    "type": "UNKNOWN_FIELD",
-    "message": "Field 'nme' not found on type '...Properties'"
-  }],
-  "suggestions": [
-    "Unknown field 'nme'. Did you mean: name?"
-  ]
+### Entity Name
+```graphql
+# Use entityName at entity level
+node {
+  entityName
+  properties { guid state }
 }
 ```
 
-Use these suggestions to correct queries before execution.
+### Relationship Navigation
+```graphql
+# Use snake_case entity type field
+relationshipsIn {
+  isContainedIn {
+    tanzu_tas_application(first: 100) {
+      edges {
+        node {
+          entityName
+        }
+      }
+    }
+  }
+}
+```
+
+### Relationship Field Names
+| To Get | Use Field |
+|--------|-----------|
+| Applications | `tanzu_tas_application` |
+| Spaces | `tanzu_tas_space` |
+| Organizations | `tanzu_tas_organization` |
+| Foundations | `tanzu_tas_foundation` |
 
 ## Prevention Strategies
 
 1. **Always validate first** - Use `tanzu_validate_query` before `tanzu_graphql_query`
-2. **Use common patterns** - Start from known working queries
-3. **Check schema** - Verify type and field names exist
-4. **Start simple** - Build complex queries incrementally
-5. **Handle pagination** - Include `pageInfo` to manage large results
+2. **Use common patterns** - Start from known working queries in `patterns/common-queries.md`
+3. **Remember entityName** - Entity names are at entity level, not `properties.name`
+4. **Remember snake_case** - Relationship fields use `tanzu_tas_{entity}` format
+5. **Check schema** - Verify type and field names exist
+6. **Start simple** - Build complex queries incrementally
