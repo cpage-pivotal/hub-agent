@@ -68,8 +68,11 @@ public class TanzuMutateTool {
             @McpToolParam(description = "Named operation to execute if mutation contains multiple operations (optional)", required = false) 
             String operationName,
             
-            @McpToolParam(description = "Safety confirmation for destructive operations. Must be true to execute delete/remove operations.", required = false) 
-            Boolean confirm
+            @McpToolParam(description = "Safety confirmation for destructive operations. Must be true to execute delete/remove operations.", required = false)
+            Boolean confirm,
+
+            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
+            String token
     ) {
         log.info("Executing GraphQL mutation via MCP tool");
         
@@ -88,7 +91,7 @@ public class TanzuMutateTool {
                     .operationName(operationName)
                     .build();
 
-            GraphQLResponse response = graphQLService.executeMutation(request);
+            GraphQLResponse response = graphQLService.executeMutation(request, token);
             
             return formatResponse(response);
             

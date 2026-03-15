@@ -52,8 +52,11 @@ public class TanzuFindEntityPathTool {
             @McpToolParam(description = "Target entity type - must include _Type suffix (e.g., Entity_Tanzu_TAS_Foundation_Type)") 
             String toType,
             
-            @McpToolParam(description = "Maximum traversal depth (default: 3, max: 5)", required = false) 
-            Integer maxDepth
+            @McpToolParam(description = "Maximum traversal depth (default: 3, max: 5)", required = false)
+            Integer maxDepth,
+
+            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
+            String token
     ) {
         log.debug("Finding path from {} to {}", fromType, toType);
         
@@ -69,20 +72,20 @@ public class TanzuFindEntityPathTool {
             int depth = maxDepth != null ? Math.min(maxDepth, 5) : 3;
             
             // Verify types exist
-            if (schemaService.getTypeDetails(fromType).isEmpty()) {
-                List<String> similar = schemaService.findSimilarTypes(fromType);
+            if (schemaService.getTypeDetails(fromType, token).isEmpty()) {
+                List<String> similar = schemaService.findSimilarTypes(fromType, token);
                 return formatError("Type '" + fromType + "' not found." + 
                         (similar.isEmpty() ? "" : " Did you mean: " + String.join(", ", similar) + "?"));
             }
             
-            if (schemaService.getTypeDetails(toType).isEmpty()) {
-                List<String> similar = schemaService.findSimilarTypes(toType);
+            if (schemaService.getTypeDetails(toType, token).isEmpty()) {
+                List<String> similar = schemaService.findSimilarTypes(toType, token);
                 return formatError("Type '" + toType + "' not found." + 
                         (similar.isEmpty() ? "" : " Did you mean: " + String.join(", ", similar) + "?"));
             }
             
             // Find paths
-            List<List<EntityRelationship>> paths = schemaService.findRelationshipPaths(fromType, toType, depth);
+            List<List<EntityRelationship>> paths = schemaService.findRelationshipPaths(fromType, toType, depth, token);
             
             if (paths.isEmpty()) {
                 return formatNoPathFound(fromType, toType, depth);

@@ -29,10 +29,10 @@ public class SchemaIntrospectionService {
     /**
      * Get the cached schema, loading it if necessary.
      */
-    @Cacheable(value = "graphql-schema")
-    public SchemaCache getSchema() {
+    @Cacheable(value = "graphql-schema", key = "'schema'")
+    public SchemaCache getSchema(String token) {
         log.info("Loading schema from Tanzu Platform API");
-        Map<String, Object> schemaData = graphQLService.introspectSchema();
+        Map<String, Object> schemaData = graphQLService.introspectSchema(token);
         return parseSchema(schemaData);
     }
 
@@ -48,8 +48,8 @@ public class SchemaIntrospectionService {
      * Get details for a specific type.
      */
     @Cacheable(value = "type-definitions", key = "#typeName")
-    public Optional<TypeDefinition> getTypeDetails(String typeName) {
-        SchemaCache schema = getSchema();
+    public Optional<TypeDefinition> getTypeDetails(String typeName, String token) {
+        SchemaCache schema = getSchema(token);
         return schema.getType(typeName);
     }
 
@@ -57,16 +57,16 @@ public class SchemaIntrospectionService {
      * Get entity relationships from the schema.
      */
     @Cacheable(value = "entity-relationships")
-    public Map<String, List<EntityRelationship>> getEntityRelationships() {
-        SchemaCache schema = getSchema();
+    public Map<String, List<EntityRelationship>> getEntityRelationships(String token) {
+        SchemaCache schema = getSchema(token);
         return buildRelationshipGraph(schema);
     }
 
     /**
      * Search for types by name pattern.
      */
-    public List<TypeDefinition> searchTypes(String search, String domain, String category) {
-        SchemaCache schema = getSchema();
+    public List<TypeDefinition> searchTypes(String search, String domain, String category, String token) {
+        SchemaCache schema = getSchema(token);
         List<TypeDefinition> types = schema.getTypes();
 
         return types.stream()
@@ -80,8 +80,8 @@ public class SchemaIntrospectionService {
     /**
      * Find types by domain prefix.
      */
-    public List<TypeDefinition> getTypesByDomain(String domain) {
-        SchemaCache schema = getSchema();
+    public List<TypeDefinition> getTypesByDomain(String domain, String token) {
+        SchemaCache schema = getSchema(token);
         String prefix = getDomainPrefix(domain);
         if (prefix == null) {
             return Collections.emptyList();
@@ -92,8 +92,8 @@ public class SchemaIntrospectionService {
     /**
      * Find similar type names using Levenshtein distance.
      */
-    public List<String> findSimilarTypes(String typeName) {
-        SchemaCache schema = getSchema();
+    public List<String> findSimilarTypes(String typeName, String token) {
+        SchemaCache schema = getSchema(token);
         return schema.getTypes().stream()
                 .map(TypeDefinition::name)
                 .filter(Objects::nonNull)
@@ -108,8 +108,8 @@ public class SchemaIntrospectionService {
     /**
      * Find similar field names for a given type.
      */
-    public List<String> findSimilarFields(String parentType, String fieldName) {
-        return getTypeDetails(parentType)
+    public List<String> findSimilarFields(String parentType, String fieldName, String token) {
+        return getTypeDetails(parentType, token)
                 .map(TypeDefinition::fields)
                 .orElse(Collections.emptyList())
                 .stream()
@@ -126,8 +126,8 @@ public class SchemaIntrospectionService {
     /**
      * Find relationship paths between two entity types.
      */
-    public List<List<EntityRelationship>> findRelationshipPaths(String fromType, String toType, int maxDepth) {
-        Map<String, List<EntityRelationship>> graph = getEntityRelationships();
+    public List<List<EntityRelationship>> findRelationshipPaths(String fromType, String toType, int maxDepth, String token) {
+        Map<String, List<EntityRelationship>> graph = getEntityRelationships(token);
         List<List<EntityRelationship>> paths = new ArrayList<>();
         
         // BFS to find paths
@@ -180,17 +180,28 @@ public class SchemaIntrospectionService {
     /**
      * Refresh the schema cache.
      */
-    public void refreshSchema() {
+    public void evictCaches() {
+        log.info("Evicting schema caches");
+        var schemaCache = cacheManager.getCache("graphql-schema");
+        var relationshipsCache = cacheManager.getCache("entity-relationships");
+        var typeDefsCache = cacheManager.getCache("type-definitions");
+
+        if (schemaCache != null) schemaCache.clear();
+        if (relationshipsCache != null) relationshipsCache.clear();
+        if (typeDefsCache != null) typeDefsCache.clear();
+    }
+
+    public void refreshSchema(String token) {
         log.info("Refreshing schema cache");
         var schemaCache = cacheManager.getCache("graphql-schema");
         var relationshipsCache = cacheManager.getCache("entity-relationships");
         var typeDefsCache = cacheManager.getCache("type-definitions");
-        
+
         if (schemaCache != null) schemaCache.clear();
         if (relationshipsCache != null) relationshipsCache.clear();
         if (typeDefsCache != null) typeDefsCache.clear();
-        
-        getSchema(); // Reload
+
+        getSchema(token); // Reload
     }
 
     @SuppressWarnings("unchecked")

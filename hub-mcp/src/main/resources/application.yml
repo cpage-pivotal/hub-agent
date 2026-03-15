@@ -28,6 +28,7 @@ tanzu:
     schema:
       ttl: 24h
       max-size: 100
+      refresh-cron: "0 0 2 * * ?"  # Daily at 2 AM
 
 management:
   endpoints:
@@ -40,8 +41,13 @@ management:
 
 logging:
   level:
-    org.tanzu.hubmcp: DEBUG
-    org.springframework.ai.mcp: DEBUG
+    root: WARN
+    org.tanzu.hubmcp: INFO
+    org.springframework.ai.mcp: INFO
+    # Reduce noise from framework components
+    org.springframework.boot: INFO
+    org.apache.catalina: WARN
+    io.netty: WARN
 
 server:
   shutdown: immediate

@@ -13,7 +13,7 @@ import java.time.Duration;
 @Validated
 public record TanzuPlatformProperties(
         @NotBlank String url,
-        @NotBlank String token,
+        String token,
         GraphQLProperties graphql,
         CacheProperties cache
 ) {

@@ -1,0 +1,11 @@
+---
+applications:
+  - name: hub-mcp
+    buildpacks:
+      - java_buildpack_offline
+    path: target/hub-mcp-0.0.1-SNAPSHOT.jar
+    memory: 1G
+    instances: 1
+    env:
+      JBP_CONFIG_OPEN_JDK_JRE: '{ jre: { version: 21.+ } }'
+      TANZU_PLATFORM_URL: ((tanzu_platform_url))

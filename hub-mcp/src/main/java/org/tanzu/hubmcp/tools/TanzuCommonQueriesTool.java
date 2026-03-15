@@ -21,6 +21,9 @@ import java.util.*;
 public class TanzuCommonQueriesTool {
 
     private static final Logger log = LoggerFactory.getLogger(TanzuCommonQueriesTool.class);
+    
+    // Maximum response size before triggering auto-summarization
+    private static final int MAX_RESPONSE_CHARS = 50000;
 
     private final TanzuGraphQLService graphQLService;
     private final ObjectMapper objectMapper;
@@ -35,11 +38,16 @@ public class TanzuCommonQueriesTool {
     @McpTool(name = "tanzu_common_queries", description = """
             Execute pre-built common query patterns against the Tanzu Platform.
             
-            Available patterns:
+            EFFICIENCY PATTERNS (use for aggregation questions):
+            - count_stopped_apps_by_space: Count stopped apps per space (EFFICIENT for "spaces with N stopped apps")
+            - summarize_app_states: Get counts of apps by state across all spaces
+            - spaces_summary: Get space summaries with app counts (no app details)
+            
+            DETAIL PATTERNS (use when you need full entity data):
             - list_foundations: List all TAS foundations
-            - list_organizations: List organizations (optionally by foundation)
-            - list_spaces: List spaces (optionally by organization)
-            - list_applications: List applications (optionally by space)
+            - list_organizations: List organizations
+            - list_spaces: List spaces
+            - list_applications: List applications
             - get_foundation_by_name: Get foundation details by name
             - find_vulnerabilities: Find vulnerabilities (by severity)
             - find_critical_cves: Find critical CVE vulnerabilities
@@ -49,17 +57,22 @@ public class TanzuCommonQueriesTool {
             - check_capacity: Check capacity recommendations
             - list_insights: List platform insights
             - find_stopped_apps: Find stopped/crashed applications
-            - list_service_bindings: List service bindings for an app
+            - spaces_with_apps: List spaces with applications (WARNING: can be large!)
+            - list_service_bindings: List service bindings
             - get_artifact_sbom: Get software bill of materials
             
-            Use 'list' pattern to see all available patterns with descriptions.
+            Use 'list' pattern to see all available patterns.
+            Set summarize=true in parameters for token-efficient responses.
             """)
     public String executeCommonQuery(
-            @McpToolParam(description = "Query pattern name (e.g., 'list_foundations'). Use 'list' to see all available patterns.") 
+            @McpToolParam(description = "Query pattern name (e.g., 'count_stopped_apps_by_space'). Use 'list' to see all available patterns.") 
             String pattern,
             
-            @McpToolParam(description = "Pattern-specific parameters as JSON (optional). Example: {\"severity\": \"CRITICAL\", \"first\": 10}", required = false) 
-            String parameters
+            @McpToolParam(description = "Pattern-specific parameters as JSON (optional). Example: {\"first\": 10, \"summarize\": true}. Use 'summarize': true for token-efficient aggregated responses.", required = false)
+            String parameters,
+
+            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
+            String token
     ) {
         log.debug("Executing common query pattern: {}", pattern);
         
@@ -87,9 +100,24 @@ public class TanzuCommonQueriesTool {
                     .variables(variables.isEmpty() ? null : variables)
                     .build();
 
-            GraphQLResponse response = graphQLService.executeQuery(request);
+            GraphQLResponse response = graphQLService.executeQuery(request, token);
             
-            return formatResponse(pattern, template.description, query, response);
+            // Check if summarization is requested or response is too large
+            boolean shouldSummarize = Boolean.TRUE.equals(params.get("summarize"));
+            
+            // Apply pattern-specific post-processing if applicable
+            if (template.hasPostProcessor()) {
+                return template.postProcessor().process(pattern, response.data(), shouldSummarize, objectMapper);
+            }
+            
+            // Check response size and auto-summarize if too large
+            String formattedResponse = formatResponse(pattern, template.description, query, response);
+            if (formattedResponse.length() > MAX_RESPONSE_CHARS && !shouldSummarize) {
+                log.warn("Response size {} exceeds threshold, auto-summarizing", formattedResponse.length());
+                return formatSummarizedResponse(pattern, template.description, response.data());
+            }
+            
+            return formattedResponse;
             
         } catch (GraphQLException e) {
             log.warn("Common query failed: {}", e.getMessage());
@@ -109,20 +137,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListFoundations($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Foundation(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            apiEndpoint
-                            version
+                    typed {
+                      tanzu {
+                        tas {
+                          foundation {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -136,19 +170,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListOrganizations($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Organization(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            guid
+                    typed {
+                      tanzu {
+                        tas {
+                          organization {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -162,19 +203,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListSpaces($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Space(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            guid
+                    typed {
+                      tanzu {
+                        tas {
+                          space {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -188,23 +236,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListApplications($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Application(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            state
-                            instances
-                            memory
-                            diskQuota
-                            buildpack
+                    typed {
+                      tanzu {
+                        tas {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -213,19 +264,25 @@ public class TanzuCommonQueriesTool {
         ));
         
         map.put("get_foundation_by_name", new QueryTemplate(
-                "Get foundation details by name",
+                "Get foundation details by name - use entityName filter",
                 Map.of(),
                 """
                 query GetFoundationByName($name: String!) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Foundation(filter: {property: "name", value: $name}) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            apiEndpoint
-                            version
+                    typed {
+                      tanzu {
+                        tas {
+                          foundation {
+                            query(filter: {property: "entityName", value: $name}) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -295,16 +352,20 @@ public class TanzuCommonQueriesTool {
                 """
                 query GetAppHealth($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Application(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            state
-                            instances
-                            runningInstances
-                            memory
+                    typed {
+                      tanzu {
+                        tas {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -320,20 +381,26 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListSpringApps($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_Spring_Application(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            springBootVersion
-                            javaVersion
+                    typed {
+                      tanzu {
+                        spring {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  entityType
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
-                      }
-                      pageInfo {
-                        hasNextPage
-                        endCursor
                       }
                     }
                   }
@@ -412,19 +479,88 @@ public class TanzuCommonQueriesTool {
         ));
         
         map.put("find_stopped_apps", new QueryTemplate(
-                "Find stopped or crashed applications",
-                Map.of("first", 50),
+                "Find stopped or crashed applications with their state and space info",
+                Map.of("first", 100),
                 """
                 query FindStoppedApps($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_Application(first: $first, filter: {property: "state", value: "STOPPED"}) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
-                            state
-                            instances
+                    typed {
+                      tanzu {
+                        tas {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityId
+                                  entityName
+                                  properties {
+                                    state
+                                    health_status
+                                    spaceGUID
+                                    foundation
+                                  }
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """
+        ));
+        
+        map.put("spaces_with_apps", new QueryTemplate(
+                "List spaces with their applications and states - useful for finding spaces with stopped apps",
+                Map.of("first", 100, "appFirst", 100),
+                """
+                query SpacesWithApps($first: Int, $appFirst: Int) {
+                  entityQuery {
+                    typed {
+                      tanzu {
+                        tas {
+                          space {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityName
+                                  properties {
+                                    guid
+                                    totalAppCount
+                                    foundation
+                                    organizationGUID
+                                  }
+                                  relationshipsIn {
+                                    isContainedIn {
+                                      tanzu_tas_application(first: $appFirst) {
+                                        edges {
+                                          node {
+                                            entityName
+                                            properties {
+                                              state
+                                              health_status
+                                              instanceCount
+                                              runningInstanceCount
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
                           }
                         }
                       }
@@ -440,12 +576,18 @@ public class TanzuCommonQueriesTool {
                 """
                 query ListServiceBindings($first: Int) {
                   entityQuery {
-                    Entity_Tanzu_TAS_ServiceBinding(first: $first) {
-                      edges {
-                        node {
-                          id
-                          properties {
-                            name
+                    typed {
+                      tanzu {
+                        tas {
+                          serviceBinding {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  id
+                                  entityName
+                                }
+                              }
+                            }
                           }
                         }
                       }
@@ -482,7 +624,319 @@ public class TanzuCommonQueriesTool {
                 """
         ));
         
+        // ============================================
+        // EFFICIENT AGGREGATION PATTERNS
+        // These patterns compute summaries server-side
+        // ============================================
+        
+        map.put("count_stopped_apps_by_space", new QueryTemplate(
+                "Count stopped apps per space - EFFICIENT for 'spaces with N stopped apps' questions",
+                Map.of("first", 200, "appFirst", 200),
+                """
+                query CountStoppedAppsBySpace($first: Int, $appFirst: Int) {
+                  entityQuery {
+                    typed {
+                      tanzu {
+                        tas {
+                          space {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  entityName
+                                  properties {
+                                    foundation
+                                    organizationGUID
+                                  }
+                                  relationshipsIn {
+                                    isContainedIn {
+                                      tanzu_tas_application(first: $appFirst) {
+                                        edges {
+                                          node {
+                                            entityName
+                                            properties {
+                                              state
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """,
+                TanzuCommonQueriesTool::processStoppedAppsBySpace
+        ));
+        
+        map.put("summarize_app_states", new QueryTemplate(
+                "Get aggregate counts of apps by state - EFFICIENT for state distribution questions",
+                Map.of("first", 500),
+                """
+                query SummarizeAppStates($first: Int) {
+                  entityQuery {
+                    typed {
+                      tanzu {
+                        tas {
+                          application {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  entityName
+                                  properties {
+                                    state
+                                    health_status
+                                    spaceGUID
+                                    foundation
+                                  }
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """,
+                TanzuCommonQueriesTool::processAppStateSummary
+        ));
+        
+        map.put("spaces_summary", new QueryTemplate(
+                "Get space summaries with app counts (no app details) - EFFICIENT for space overview",
+                Map.of("first", 100),
+                """
+                query SpacesSummary($first: Int) {
+                  entityQuery {
+                    typed {
+                      tanzu {
+                        tas {
+                          space {
+                            query(first: $first) {
+                              edges {
+                                node {
+                                  entityName
+                                  properties {
+                                    guid
+                                    foundation
+                                    organizationGUID
+                                    totalAppCount
+                                    totalMemoryLimitMB
+                                    totalMemoryQuotaMB
+                                  }
+                                }
+                              }
+                              pageInfo {
+                                hasNextPage
+                                endCursor
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                """
+        ));
+        
         return map;
+    }
+    
+    // ============================================
+    // POST-PROCESSING FUNCTIONS FOR AGGREGATION
+    // ============================================
+    
+    @SuppressWarnings("unchecked")
+    private static String processStoppedAppsBySpace(String pattern, Map<String, Object> data, boolean summarize, ObjectMapper mapper) {
+        try {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("pattern", pattern);
+            result.put("description", "Spaces with stopped application counts");
+            
+            // Navigate to the spaces data
+            Map<String, Object> entityQuery = (Map<String, Object>) data.get("entityQuery");
+            if (entityQuery == null) {
+                result.put("summary", "No data returned");
+                return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
+            }
+            
+            Map<String, Object> typed = (Map<String, Object>) entityQuery.get("typed");
+            Map<String, Object> tanzu = (Map<String, Object>) typed.get("tanzu");
+            Map<String, Object> tas = (Map<String, Object>) tanzu.get("tas");
+            Map<String, Object> space = (Map<String, Object>) tas.get("space");
+            Map<String, Object> query = (Map<String, Object>) space.get("query");
+            List<Map<String, Object>> edges = (List<Map<String, Object>>) query.get("edges");
+            
+            // Process each space and count stopped apps
+            List<Map<String, Object>> spacesWithStoppedApps = new ArrayList<>();
+            int totalSpaces = 0;
+            int totalStoppedApps = 0;
+            int totalApps = 0;
+            
+            for (Map<String, Object> edge : edges) {
+                Map<String, Object> node = (Map<String, Object>) edge.get("node");
+                String spaceName = (String) node.get("entityName");
+                Map<String, Object> props = (Map<String, Object>) node.get("properties");
+                String foundation = props != null ? (String) props.get("foundation") : null;
+                
+                // Get apps in this space
+                Map<String, Object> relationshipsIn = (Map<String, Object>) node.get("relationshipsIn");
+                int stoppedCount = 0;
+                int runningCount = 0;
+                List<String> stoppedAppNames = new ArrayList<>();
+                
+                if (relationshipsIn != null) {
+                    Map<String, Object> isContainedIn = (Map<String, Object>) relationshipsIn.get("isContainedIn");
+                    if (isContainedIn != null) {
+                        Map<String, Object> appConnection = (Map<String, Object>) isContainedIn.get("tanzu_tas_application");
+                        if (appConnection != null) {
+                            List<Map<String, Object>> appEdges = (List<Map<String, Object>>) appConnection.get("edges");
+                            if (appEdges != null) {
+                                for (Map<String, Object> appEdge : appEdges) {
+                                    Map<String, Object> appNode = (Map<String, Object>) appEdge.get("node");
+                                    Map<String, Object> appProps = (Map<String, Object>) appNode.get("properties");
+                                    String state = appProps != null ? (String) appProps.get("state") : null;
+                                    
+                                    totalApps++;
+                                    if ("STOPPED".equalsIgnoreCase(state)) {
+                                        stoppedCount++;
+                                        totalStoppedApps++;
+                                        stoppedAppNames.add((String) appNode.get("entityName"));
+                                    } else if ("STARTED".equalsIgnoreCase(state)) {
+                                        runningCount++;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                totalSpaces++;
+                
+                // Only include spaces that have stopped apps
+                if (stoppedCount > 0) {
+                    Map<String, Object> spaceInfo = new LinkedHashMap<>();
+                    spaceInfo.put("spaceName", spaceName);
+                    spaceInfo.put("foundation", foundation);
+                    spaceInfo.put("stoppedAppCount", stoppedCount);
+                    spaceInfo.put("runningAppCount", runningCount);
+                    spaceInfo.put("totalApps", stoppedCount + runningCount);
+                    
+                    // Only include app names if not too many
+                    if (stoppedAppNames.size() <= 10) {
+                        spaceInfo.put("stoppedApps", stoppedAppNames);
+                    } else {
+                        spaceInfo.put("stoppedApps", stoppedAppNames.subList(0, 10));
+                        spaceInfo.put("moreStoppedApps", stoppedAppNames.size() - 10);
+                    }
+                    
+                    spacesWithStoppedApps.add(spaceInfo);
+                }
+            }
+            
+            // Sort by stopped app count descending
+            spacesWithStoppedApps.sort((a, b) -> 
+                Integer.compare((Integer) b.get("stoppedAppCount"), (Integer) a.get("stoppedAppCount")));
+            
+            // Build summary
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("totalSpaces", totalSpaces);
+            summary.put("spacesWithStoppedApps", spacesWithStoppedApps.size());
+            summary.put("totalApps", totalApps);
+            summary.put("totalStoppedApps", totalStoppedApps);
+            
+            result.put("summary", summary);
+            result.put("spacesWithStoppedApps", spacesWithStoppedApps);
+            
+            // Provide convenient answers to common questions
+            Map<String, Object> insights = new LinkedHashMap<>();
+            long spacesWithMoreThan2Stopped = spacesWithStoppedApps.stream()
+                    .filter(s -> (Integer) s.get("stoppedAppCount") > 2)
+                    .count();
+            insights.put("spacesWithMoreThan2StoppedApps", spacesWithMoreThan2Stopped);
+            
+            if (spacesWithMoreThan2Stopped > 0) {
+                insights.put("spacesWithMoreThan2StoppedAppsList", 
+                    spacesWithStoppedApps.stream()
+                        .filter(s -> (Integer) s.get("stoppedAppCount") > 2)
+                        .map(s -> s.get("spaceName") + " (" + s.get("stoppedAppCount") + " stopped)")
+                        .toList());
+            }
+            
+            result.put("insights", insights);
+            
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
+            
+        } catch (Exception e) {
+            return "{\"success\": false, \"error\": \"Error processing stopped apps data: " + e.getMessage() + "\"}";
+        }
+    }
+    
+    @SuppressWarnings("unchecked")
+    private static String processAppStateSummary(String pattern, Map<String, Object> data, boolean summarize, ObjectMapper mapper) {
+        try {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("pattern", pattern);
+            result.put("description", "Application state summary");
+            
+            // Navigate to the apps data
+            Map<String, Object> entityQuery = (Map<String, Object>) data.get("entityQuery");
+            if (entityQuery == null) {
+                result.put("summary", "No data returned");
+                return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
+            }
+            
+            Map<String, Object> typed = (Map<String, Object>) entityQuery.get("typed");
+            Map<String, Object> tanzu = (Map<String, Object>) typed.get("tanzu");
+            Map<String, Object> tas = (Map<String, Object>) tanzu.get("tas");
+            Map<String, Object> application = (Map<String, Object>) tas.get("application");
+            Map<String, Object> query = (Map<String, Object>) application.get("query");
+            List<Map<String, Object>> edges = (List<Map<String, Object>>) query.get("edges");
+            Map<String, Object> pageInfo = (Map<String, Object>) query.get("pageInfo");
+            
+            // Count by state
+            Map<String, Integer> stateCount = new LinkedHashMap<>();
+            Map<String, Integer> healthCount = new LinkedHashMap<>();
+            Map<String, Integer> foundationCount = new LinkedHashMap<>();
+            
+            for (Map<String, Object> edge : edges) {
+                Map<String, Object> node = (Map<String, Object>) edge.get("node");
+                Map<String, Object> props = (Map<String, Object>) node.get("properties");
+                
+                String state = props != null ? (String) props.get("state") : "UNKNOWN";
+                String health = props != null ? (String) props.get("health_status") : "UNKNOWN";
+                String foundation = props != null ? (String) props.get("foundation") : "UNKNOWN";
+                
+                stateCount.merge(state != null ? state : "UNKNOWN", 1, Integer::sum);
+                healthCount.merge(health != null ? health : "UNKNOWN", 1, Integer::sum);
+                foundationCount.merge(foundation != null ? foundation : "UNKNOWN", 1, Integer::sum);
+            }
+            
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("totalAppsQueried", edges.size());
+            summary.put("hasMoreApps", pageInfo != null && Boolean.TRUE.equals(pageInfo.get("hasNextPage")));
+            summary.put("byState", stateCount);
+            summary.put("byHealthStatus", healthCount);
+            summary.put("byFoundation", foundationCount);
+            
+            result.put("summary", summary);
+            
+            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
+            
+        } catch (Exception e) {
+            return "{\"success\": false, \"error\": \"Error processing app state summary: " + e.getMessage() + "\"}";
+        }
     }
 
     private String listPatterns() {
@@ -559,17 +1013,76 @@ public class TanzuCommonQueriesTool {
         }
     }
 
+    private String formatSummarizedResponse(String pattern, String description, Map<String, Object> data) {
+        try {
+            Map<String, Object> result = new LinkedHashMap<>();
+            result.put("success", true);
+            result.put("pattern", pattern);
+            result.put("description", description);
+            result.put("note", "Response was auto-summarized due to size. Use more specific patterns for detailed data.");
+            
+            // Create a summary by counting entities at each level
+            Map<String, Object> summary = summarizeData(data, 0);
+            result.put("summary", summary);
+            
+            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(result);
+        } catch (Exception e) {
+            return "{\"success\": true, \"pattern\": \"" + pattern + "\", \"note\": \"Response summarization issue\"}";
+        }
+    }
+    
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> summarizeData(Map<String, Object> data, int depth) {
+        if (depth > 5) {
+            return Map.of("truncated", true);
+        }
+        
+        Map<String, Object> summary = new LinkedHashMap<>();
+        
+        for (Map.Entry<String, Object> entry : data.entrySet()) {
+            String key = entry.getKey();
+            Object value = entry.getValue();
+            
+            if (value instanceof List<?> list) {
+                summary.put(key + "_count", list.size());
+                if (!list.isEmpty() && list.get(0) instanceof Map) {
+                    // Sample first few items
+                    summary.put(key + "_sample", list.size() > 3 ? 
+                        ((List<?>)list).subList(0, 3) : list);
+                }
+            } else if (value instanceof Map) {
+                summary.put(key, summarizeData((Map<String, Object>) value, depth + 1));
+            } else {
+                summary.put(key, value);
+            }
+        }
+        
+        return summary;
+    }
+
     /**
-     * Query template with description, default parameters, and query string.
+     * Functional interface for post-processing query results.
+     */
+    @FunctionalInterface
+    private interface PostProcessor {
+        String process(String pattern, Map<String, Object> data, boolean summarize, ObjectMapper mapper);
+    }
+
+    /**
+     * Query template with description, default parameters, query string, and optional post-processor.
      */
     private record QueryTemplate(
             String description,
             Map<String, Object> defaults,
-            String query
+            String query,
+            PostProcessor postProcessor
     ) {
+        // Constructor without post-processor
+        QueryTemplate(String description, Map<String, Object> defaults, String query) {
+            this(description, defaults, query, null);
+        }
+        
         String buildQuery(Map<String, Object> params) {
-            // For now, return the query as-is
-            // Could add parameter substitution for non-variable parts
             return query;
         }
 
@@ -577,6 +1090,10 @@ public class TanzuCommonQueriesTool {
             Map<String, Object> variables = new HashMap<>(defaults);
             variables.putAll(params);
             return variables;
+        }
+        
+        boolean hasPostProcessor() {
+            return postProcessor != null;
         }
     }
 }
