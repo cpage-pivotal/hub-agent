@@ -47,9 +47,9 @@ public class SchemaCacheRefreshTask {
         long startTime = System.currentTimeMillis();
         
         try {
-            schemaService.refreshSchema();
+            schemaService.evictCaches();
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Schema cache refresh completed successfully in {}ms", duration);
+            log.info("Schema cache evicted in {}ms; will reload on next tool call", duration);
         } catch (Exception e) {
             log.error("Schema cache refresh failed: {}", e.getMessage(), e);
         }
@@ -63,23 +63,7 @@ public class SchemaCacheRefreshTask {
      */
     @Scheduled(initialDelay = 5000, fixedDelay = Long.MAX_VALUE)
     public void warmupCacheOnStartup() {
-        log.info("Warming up schema cache on application startup");
-        long startTime = System.currentTimeMillis();
-        
-        try {
-            var schema = schemaService.getSchema();
-            long duration = System.currentTimeMillis() - startTime;
-            log.info("Schema cache warmup completed: {} types loaded in {}ms", 
-                    schema.getTypeCount(), duration);
-            
-            // Also warm up the relationship graph
-            var relationships = schemaService.getEntityRelationships();
-            log.info("Entity relationships cached: {} entities with relationships", 
-                    relationships.size());
-        } catch (Exception e) {
-            log.warn("Schema cache warmup failed: {}. Cache will be populated on first request.", 
-                    e.getMessage());
-        }
+        log.info("Schema cache warmup skipped — token is provided per tool call and cache will be populated on first request.");
     }
 }
 

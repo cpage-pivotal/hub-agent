@@ -32,7 +32,6 @@ public class GraphQLClientConfig {
     public WebClient tanzuGraphQLClient(WebClient.Builder webClientBuilder) {
         return webClientBuilder
                 .baseUrl(properties.url())
-                .defaultHeader(HttpHeaders.AUTHORIZATION, "Bearer " + properties.token())
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                 .defaultHeader(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
                 .codecs(configurer -> configurer

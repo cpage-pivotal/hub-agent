@@ -4,6 +4,7 @@ import graphql.language.Document;
 import graphql.parser.Parser;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.http.HttpHeaders;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
@@ -43,10 +44,10 @@ public class TanzuGraphQLService {
      * @return the GraphQL response
      * @throws GraphQLException if the query fails or returns errors
      */
-    public GraphQLResponse executeQuery(GraphQLRequest request) {
+    public GraphQLResponse executeQuery(GraphQLRequest request, String token) {
         log.debug("Executing GraphQL query: {}", truncateQuery(request.query()));
         validateQuery(request.query());
-        return executeGraphQLRequest(request);
+        return executeGraphQLRequest(request, token);
     }
 
     /**
@@ -56,10 +57,10 @@ public class TanzuGraphQLService {
      * @return the GraphQL response
      * @throws GraphQLException if the mutation fails or returns errors
      */
-    public GraphQLResponse executeMutation(GraphQLRequest request) {
+    public GraphQLResponse executeMutation(GraphQLRequest request, String token) {
         log.info("Executing GraphQL mutation: {}", truncateQuery(request.query()));
         validateMutation(request.query());
-        return executeGraphQLRequest(request);
+        return executeGraphQLRequest(request, token);
     }
 
     /**
@@ -67,7 +68,7 @@ public class TanzuGraphQLService {
      *
      * @return the raw introspection data
      */
-    public Map<String, Object> introspectSchema() {
+    public Map<String, Object> introspectSchema(String token) {
         log.info("Performing schema introspection");
         
         String introspectionQuery = """
@@ -164,11 +165,11 @@ public class TanzuGraphQLService {
                 .query(introspectionQuery)
                 .build();
 
-        GraphQLResponse response = executeGraphQLRequest(request);
+        GraphQLResponse response = executeGraphQLRequest(request, token);
         return response.data();
     }
 
-    private GraphQLResponse executeGraphQLRequest(GraphQLRequest request) {
+    private GraphQLResponse executeGraphQLRequest(GraphQLRequest request, String token) {
         try {
             Duration timeout = properties.graphql().timeout();
             int maxRetries = properties.graphql().maxRetries();
@@ -176,6 +177,7 @@ public class TanzuGraphQLService {
 
             GraphQLResponse response = webClient.post()
                     .uri(endpoint)
+                    .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
                     .bodyValue(request)
                     .retrieve()
                     .bodyToMono(GraphQLResponse.class)

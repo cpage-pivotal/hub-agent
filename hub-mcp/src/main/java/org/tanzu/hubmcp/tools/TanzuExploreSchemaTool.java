@@ -71,8 +71,11 @@ public class TanzuExploreSchemaTool {
             @McpToolParam(description = "Include relationship fields (relationshipsIn/relationshipsOut) for entity types. Default: false", required = false) 
             Boolean showRelationships,
             
-            @McpToolParam(description = "Highlight commonly-used fields. Default: false", required = false) 
-            Boolean showCommonFields
+            @McpToolParam(description = "Highlight commonly-used fields. Default: false", required = false)
+            Boolean showCommonFields,
+
+            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
+            String token
     ) {
         log.debug("Exploring schema: typeName={}, search={}, domain={}, category={}", 
                 typeName, search, domain, category);
@@ -80,13 +83,14 @@ public class TanzuExploreSchemaTool {
         try {
             // If a specific type is requested, return its details
             if (typeName != null && !typeName.isBlank()) {
-                return exploreSpecificType(typeName, 
-                        Boolean.TRUE.equals(showRelationships), 
-                        Boolean.TRUE.equals(showCommonFields));
+                return exploreSpecificType(typeName,
+                        Boolean.TRUE.equals(showRelationships),
+                        Boolean.TRUE.equals(showCommonFields),
+                        token);
             }
-            
+
             // Otherwise, search/filter types
-            List<TypeDefinition> types = schemaService.searchTypes(search, domain, category);
+            List<TypeDefinition> types = schemaService.searchTypes(search, domain, category, token);
             return formatTypeList(types, domain, search);
             
         } catch (Exception e) {
@@ -95,12 +99,12 @@ public class TanzuExploreSchemaTool {
         }
     }
 
-    private String exploreSpecificType(String typeName, boolean showRelationships, boolean showCommonFields) {
-        Optional<TypeDefinition> typeOpt = schemaService.getTypeDetails(typeName);
-        
+    private String exploreSpecificType(String typeName, boolean showRelationships, boolean showCommonFields, String token) {
+        Optional<TypeDefinition> typeOpt = schemaService.getTypeDetails(typeName, token);
+
         if (typeOpt.isEmpty()) {
             // Try to find similar types
-            List<String> similar = schemaService.findSimilarTypes(typeName);
+            List<String> similar = schemaService.findSimilarTypes(typeName, token);
             if (!similar.isEmpty()) {
                 return formatError("Type '" + typeName + "' not found. Did you mean: " + 
                         String.join(", ", similar) + "?");

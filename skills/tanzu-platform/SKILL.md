@@ -6,6 +6,26 @@ This skill provides domain knowledge for constructing effective GraphQL queries 
 
 Use this skill to translate natural language requests into accurate GraphQL queries for Tanzu Platform operations.
 
+## Authentication
+
+All MCP tools require a `token` argument. Tokens rotate every 30 minutes — always get a fresh token at the start of each Tanzu Platform session.
+
+**Prerequisites:** Set these env vars in your Claude Code environment (e.g., in `.mcp.json` env config or shell profile):
+
+| Variable | Description |
+|----------|-------------|
+| `TANZU_HUB_URL` | Tanzu Hub URL (defaults to `https://tanzu-hub.kuhn-labs.com`) |
+| `TANZU_HUB_USER` | Your Tanzu Hub username |
+| `TANZU_HUB_PASSWORD` | Your Tanzu Hub password |
+
+**Get a token at the start of each session** using the Bash tool:
+
+```bash
+python3 <skill-dir>/scripts/get-token.py
+```
+
+Capture the printed token and pass it as the `token` argument to every tool call in this session.
+
 ## When to Use This Skill
 
 Read this skill **BEFORE** using any Tanzu MCP tools when:
@@ -526,12 +546,13 @@ query {
 
 ## Environment Variables
 
-The MCP server requires these environment variables:
+The MCP server requires:
 
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `TANZU_PLATFORM_URL` | Tanzu Platform URL | `https://tanzu-hub.kuhn-labs.com` |
-| `TOKEN` | Bearer token for authentication | `eyJ...` |
+
+The authentication token is no longer a server environment variable — it is obtained via `get-token.py` and passed as a `token` argument to each tool call. See the **Authentication** section above.
 
 ## Getting Help
 

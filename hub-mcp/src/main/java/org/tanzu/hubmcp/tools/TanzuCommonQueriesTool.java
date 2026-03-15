@@ -68,8 +68,11 @@ public class TanzuCommonQueriesTool {
             @McpToolParam(description = "Query pattern name (e.g., 'count_stopped_apps_by_space'). Use 'list' to see all available patterns.") 
             String pattern,
             
-            @McpToolParam(description = "Pattern-specific parameters as JSON (optional). Example: {\"first\": 10, \"summarize\": true}. Use 'summarize': true for token-efficient aggregated responses.", required = false) 
-            String parameters
+            @McpToolParam(description = "Pattern-specific parameters as JSON (optional). Example: {\"first\": 10, \"summarize\": true}. Use 'summarize': true for token-efficient aggregated responses.", required = false)
+            String parameters,
+
+            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
+            String token
     ) {
         log.debug("Executing common query pattern: {}", pattern);
         
@@ -97,7 +100,7 @@ public class TanzuCommonQueriesTool {
                     .variables(variables.isEmpty() ? null : variables)
                     .build();
 
-            GraphQLResponse response = graphQLService.executeQuery(request);
+            GraphQLResponse response = graphQLService.executeQuery(request, token);
             
             // Check if summarization is requested or response is too large
             boolean shouldSummarize = Boolean.TRUE.equals(params.get("summarize"));
