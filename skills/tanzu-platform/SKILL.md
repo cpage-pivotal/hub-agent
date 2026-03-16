@@ -1,3 +1,9 @@
+---
+name: tanzu-platform
+description: Query and manage Tanzu Platform resources — foundations, organizations, spaces, applications, vulnerabilities, alerts, and capacity — using natural language. Use when the user asks about their Tanzu Platform environment, wants to list or inspect TAS resources, investigate application health or stopped apps, find CVEs or security vulnerabilities, or check platform capacity.
+compatibility: Requires Python 3 (stdlib only) and the tanzu-platform MCP server. Set TANZU_HUB_URL, TANZU_HUB_USER, and TANZU_HUB_PASSWORD before use.
+---
+
 # Tanzu Platform Natural Language Interface Skill
 
 ## Quick Start — Follow These Steps First
@@ -10,13 +16,14 @@ For most Tanzu Platform questions, you only need two steps:
 python3 scripts/get-token.py
 ```
 
-The path is relative to the skill directory. It uses only Python standard library (no pip install needed). It reads `TANZU_HUB_URL`, `TANZU_HUB_USER`, `TANZU_HUB_PASSWORD` from environment variables. Capture the printed token for Step 2.
+Reads `TANZU_HUB_URL`, `TANZU_HUB_USER`, `TANZU_HUB_PASSWORD` from environment variables. Capture the printed token for Step 2.
 
 **Step 2: Call `tanzu_common_queries` with the matching pattern:**
 
 | User Request | Pattern to Use |
 |---|---|
 | "List my foundations" | `list_foundations` |
+| "Find a foundation by name" | `get_foundation_by_name` |
 | "List organizations" | `list_organizations` |
 | "List spaces" / "Space overview" | `list_spaces` or `spaces_summary` |
 | "List applications" | `list_applications` |
@@ -24,8 +31,11 @@ The path is relative to the skill directory. It uses only Python standard librar
 | "Spaces with stopped apps" / "How many stopped apps per space?" | `count_stopped_apps_by_space` |
 | "App state distribution" / "How many started vs stopped?" | `summarize_app_states` |
 | "Show spaces with their apps" | `spaces_with_apps` |
+| "List service bindings" | `list_service_bindings` |
 | "Find vulnerabilities" | `find_vulnerabilities` |
 | "Find critical CVEs" | `find_critical_cves` |
+| "List insights" | `list_insights` |
+| "Show artifact SBOM" | `get_artifact_sbom` |
 | "List alerts" | `list_alerts` |
 | "Check capacity" | `check_capacity` |
 | "List Spring apps" | `list_spring_apps` |
@@ -55,23 +65,13 @@ Only fall through to the full workflow when no pre-built pattern exists and you 
 
 ## Authentication
 
-All MCP tools require a `token` argument. Tokens rotate every 30 minutes — always get a fresh token at the start of each Tanzu Platform session.
-
-**Prerequisites:** These env vars must be set:
+All MCP tools require a `token` argument. Tokens rotate every 30 minutes — always get a fresh token at the start of each session.
 
 | Variable | Description |
 |----------|-------------|
 | `TANZU_HUB_URL` | Tanzu Hub URL (defaults to `https://tanzu-hub.kuhn-labs.com`) |
 | `TANZU_HUB_USER` | Your Tanzu Hub username |
 | `TANZU_HUB_PASSWORD` | Your Tanzu Hub password |
-
-**Get a token:**
-
-```bash
-python3 scripts/get-token.py
-```
-
-The path is relative to the skill directory. It uses only Python standard library — no `pip install` required. Capture the printed token and pass it as the `token` argument to every tool call.
 
 ## Available MCP Tools
 
@@ -96,145 +96,22 @@ The path is relative to the skill directory. It uses only Python standard librar
 
 ---
 
-## Reference: Query Construction (for custom queries only)
+## Custom Query Construction
 
-The sections below are reference material for building custom GraphQL queries. Skip this if `tanzu_common_queries` already handles your request.
+If no `tanzu_common_queries` pattern matches, read `reference/query-construction.md` for the full query syntax, naming conventions, entity hierarchy, and relationship navigation rules.
 
-### Query Structure
+For domain-specific entity fields and properties, read the relevant domain file only when needed:
+- TAS (foundations, orgs, spaces, apps): `domains/TAS.md`
+- Spring Boot metadata: `domains/Spring.md`
+- Alerts and observability: `domains/Observability.md`
+- Vulnerabilities and CVEs: `domains/Security.md`
+- Capacity and recommendations: `domains/Capacity.md`
 
-Queries **MUST** follow this hierarchy:
+For query templates and patterns:
+- Read `patterns/common-queries.md` if you need a starting query template
+- Read `patterns/filtering.md` if the request requires filtering by field values
+- Read `patterns/pagination.md` if the result set may exceed a single page
+- Read `patterns/entity-navigation.md` if traversing relationships between entity types
+- Read `patterns/mutations.md` before executing any mutation
 
-```
-entityQuery → typed → tanzu → {domain} → {entityType} → query(...)
-```
-
-```graphql
-query {
-  entityQuery {
-    typed {
-      tanzu {
-        tas {                           # Domain (lowercase)
-          foundation {                  # Entity type (lowercase)
-            query(first: 10) {          # Query method with pagination
-              edges {
-                node {
-                  id
-                  entityName            # Name is at entity level, NOT properties!
-                }
-              }
-              pageInfo {
-                hasNextPage
-                endCursor
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-### CRITICAL: Entity Name vs Properties
-
-**The entity name is `entityName` at the entity level, NOT `properties.name`!**
-
-```graphql
-# CORRECT
-node {
-  entityName                          # This is the entity's name!
-  properties {
-    guid                              # Properties has guid, state, etc.
-    state
-  }
-}
-
-# WRONG - name does NOT exist on properties
-node {
-  properties {
-    name                              # ERROR: field "name" doesn't exist!
-  }
-}
-```
-
-### Naming Conventions
-
-| Component | Convention | Example |
-|-----------|------------|---------|
-| Domains | lowercase | `tas`, `spring`, `platform` |
-| Entity types in queries | lowercase | `foundation`, `application`, `space` |
-| Entity type names | PascalCase with `_Type` suffix | `Entity_Tanzu_TAS_Foundation_Type` |
-| Properties types | PascalCase with `_Properties` suffix | `Entity_Tanzu_TAS_Foundation_Properties` |
-| Relationship entity fields | snake_case | `tanzu_tas_application`, `tanzu_tas_space` |
-
-### Entity Hierarchy
-
-```
-Platform
-└── Foundation Groups
-    └── Foundations (TAS)
-        ├── Organizations
-        │   └── Spaces
-        │       └── Applications
-        ├── BOSH Directors
-        └── Ops Managers
-```
-
-### Relationship Navigation
-
-Relationships use **snake_case entity type names**, NOT generic `contains`:
-
-| To Navigate | Use Field |
-|-------------|-----------|
-| Space → Applications | `relationshipsIn.isContainedIn.tanzu_tas_application` |
-| Organization → Spaces | `relationshipsIn.isContainedIn.tanzu_tas_space` |
-| Foundation → Organizations | `relationshipsIn.isContainedIn.tanzu_tas_organization` |
-| Application → Space | `relationshipsOut.isContainedIn.tanzu_tas_space` |
-| Space → Organization | `relationshipsOut.isContainedIn.tanzu_tas_organization` |
-
-- **`relationshipsIn`**: Children (entities contained IN this entity)
-- **`relationshipsOut`**: Parents (entities this entity IS CONTAINED IN)
-
-### Common Entity Fields
-
-```graphql
-node {
-  id                    # Opaque global ID
-  entityId              # Canonical entity identifier
-  entityName            # Human-readable name (THIS IS THE NAME!)
-  entityType            # Type discriminator
-  properties { ... }    # Type-specific properties (no 'name' field!)
-  relationshipsIn { ... }   # Incoming relationships
-  relationshipsOut { ... }  # Outgoing relationships
-  tags { key value }    # Key/value tags
-}
-```
-
-### Domain Quick Reference
-
-| Domain | Key Entities | Skill File |
-|--------|--------------|------------|
-| **TAS** | Foundation, Organization, Space, Application | `domains/TAS.md` |
-| **Spring** | SpringArtifact, Dependency, Runtime | `domains/Spring.md` |
-| **Observability** | Alert, Metric, Log, NotificationTarget | `domains/Observability.md` |
-| **Security** | Vulnerability, CVE, Insight, Policy | `domains/Security.md` |
-| **Capacity** | CapacityInfo, Recommendation | `domains/Capacity.md` |
-
-### Critical Rules
-
-1. **Entity name is `entityName`** at entity level, NOT `properties.name`
-2. **Relationship fields use snake_case** like `tanzu_tas_application`, NOT `contains`
-3. **Always validate custom queries** before execution using `tanzu_validate_query`
-4. **Request only needed fields** to avoid complexity limits
-5. **Handle pagination** with `first: N` at each query level
-6. **Domains and entity types are lowercase** in queries
-
-### Skill Files Reference
-
-- `patterns/common-queries.md` - 20+ frequent query templates
-- `patterns/entity-navigation.md` - Relationship traversal patterns
-- `patterns/pagination.md` - Cursor-based pagination handling
-- `patterns/filtering.md` - Filter syntax by entity type
-- `patterns/mutations.md` - Safe mutation patterns
-- `troubleshooting/error-recovery.md` - Common errors and fixes
-- `troubleshooting/anti-patterns.md` - Query patterns to avoid
+If the API returns an error, read `troubleshooting/error-recovery.md`. For queries that time out or return unexpected results, read `troubleshooting/anti-patterns.md`.
