@@ -6,19 +6,28 @@ compatibility: Requires Python 3 (stdlib only) and the tanzu-platform MCP server
 
 # Tanzu Platform Skill
 
+## IMPORTANT: Autonomous Execution
+
+This skill is fully automated. All credentials are pre-configured as environment variables. You MUST execute every step yourself using your tools — never ask the user for a token, credentials, or manual steps. The user expects results, not instructions.
+
 ## Workflow
 
-For every Tanzu Platform request, execute these steps in order. Do not ask the user for a token — generate it yourself.
+Progress:
+- [ ] Step 1: Run get-token.py to obtain a bearer token
+- [ ] Step 2: Call the matching MCP tool with the token
+- [ ] Step 3: Present formatted results to the user
 
 ### Step 1: Get a token
 
-Run the bundled `get-token.py` script using the shell tool. It reads credentials from pre-configured environment variables (`TANZU_HUB_URL`, `TANZU_HUB_USER`, `TANZU_HUB_PASSWORD`) and prints a bearer token to stdout. Execute it now — do not ask the user for credentials or a token:
+Your first action must be to run this command with the shell tool:
 
 ```bash
 python3 .goose/skills/tanzu-hub/scripts/get-token.py
 ```
 
-Capture the entire stdout output as the token string. Tokens expire after 30 minutes; get a fresh one if a subsequent tool call returns an authentication error.
+This script uses pre-configured environment variables and prints a bearer token to stdout. Capture the output — that is your token. If the script fails, check that TANZU_HUB_URL, TANZU_HUB_USER, and TANZU_HUB_PASSWORD are set.
+
+Tokens expire after 30 minutes. Get a fresh one if an MCP tool returns an authentication error.
 
 ### Step 2: Pick the right tool call
 
