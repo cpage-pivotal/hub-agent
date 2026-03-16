@@ -12,13 +12,13 @@ For every Tanzu Platform request, execute these steps in order. Do not ask the u
 
 ### Step 1: Get a token
 
-Run this script — it reads credentials from pre-configured environment variables and prints a bearer token to stdout:
+Run the bundled `get-token.py` script using the shell tool. It reads credentials from pre-configured environment variables (`TANZU_HUB_URL`, `TANZU_HUB_USER`, `TANZU_HUB_PASSWORD`) and prints a bearer token to stdout. Execute it now — do not ask the user for credentials or a token:
 
 ```bash
-python3 scripts/get-token.py
+python3 .goose/skills/tanzu-hub/scripts/get-token.py
 ```
 
-Capture the printed token string. Tokens expire after 30 minutes; get a fresh one if a tool call returns an authentication error.
+Capture the entire stdout output as the token string. Tokens expire after 30 minutes; get a fresh one if a subsequent tool call returns an authentication error.
 
 ### Step 2: Pick the right tool call
 
