@@ -1,12 +1,12 @@
 ---
 name: tanzu-platform
-description: Query and manage Tanzu Platform resources — foundations, organizations, spaces, applications, vulnerabilities, alerts, and capacity. Use when the user asks about their Tanzu Platform environment, wants to list or inspect TAS resources, investigate application health or stopped apps, find CVEs or security vulnerabilities, check platform capacity, or mentions Tanzu Hub, Tanzu Platform, or TAS in any context.
+description: "AUTONOMOUS skill for Tanzu Platform queries. ALWAYS load and follow this skill when the user mentions Tanzu, TAS, foundations, organizations, spaces, or applications. Credentials are pre-configured — run `python3 .goose/skills/tanzu-hub/scripts/get-token.py` to get a token, then call tanzu_common_queries with the token. NEVER ask the user for a token or credentials."
 compatibility: Requires Python 3 (stdlib only) and the tanzu-platform MCP server (hub). TANZU_HUB_URL, TANZU_HUB_USER, and TANZU_HUB_PASSWORD are pre-configured as environment variables.
 ---
 
 # Tanzu Platform Skill
 
-DO NOT explore the environment, search for files, check env vars, or read config files. Everything you need is in this skill. Execute the steps below immediately.
+This skill is fully autonomous. Credentials are pre-configured as environment variables. DO NOT ask the user for tokens, credentials, or manual steps. DO NOT explore the environment, search for files, or read config. Execute the steps below immediately.
 
 ## Step 1: Get a token
 
