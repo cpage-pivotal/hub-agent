@@ -7,10 +7,10 @@ For most Tanzu Platform questions, you only need two steps:
 **Step 1: Get a token** (required once per session, tokens last 30 minutes):
 
 ```bash
-python3 <skill-dir>/scripts/get-token.py
+python3 scripts/get-token.py
 ```
 
-The script uses only Python standard library (no pip install needed). It reads `TANZU_HUB_URL`, `TANZU_HUB_USER`, `TANZU_HUB_PASSWORD` from environment variables. Capture the printed token for Step 2.
+The path is relative to the skill directory. It uses only Python standard library (no pip install needed). It reads `TANZU_HUB_URL`, `TANZU_HUB_USER`, `TANZU_HUB_PASSWORD` from environment variables. Capture the printed token for Step 2.
 
 **Step 2: Call `tanzu_common_queries` with the matching pattern:**
 
@@ -68,10 +68,10 @@ All MCP tools require a `token` argument. Tokens rotate every 30 minutes — alw
 **Get a token:**
 
 ```bash
-python3 <skill-dir>/scripts/get-token.py
+python3 scripts/get-token.py
 ```
 
-The script uses only Python standard library — no `pip install` required. Capture the printed token and pass it as the `token` argument to every tool call.
+The path is relative to the skill directory. It uses only Python standard library — no `pip install` required. Capture the printed token and pass it as the `token` argument to every tool call.
 
 ## Available MCP Tools
 
