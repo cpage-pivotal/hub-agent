@@ -111,7 +111,13 @@ try:
         },
     )
 except urllib.error.HTTPError as e:
-    sys.exit(f"Login POST failed with HTTP {e.code}: {e.reason}")
+    location = e.headers.get("Location") if hasattr(e, "headers") else None
+    if e.code in (301, 302, 303, 307, 308) and location:
+        if location.startswith("/"):
+            location = f"{HUB_URL}{location}"
+        resp = _get(location)
+    else:
+        sys.exit(f"Login POST failed with HTTP {e.code}: {e.reason}")
 
 if "/auth/login" in resp.url:
     sys.exit("Login failed — check your credentials.")
