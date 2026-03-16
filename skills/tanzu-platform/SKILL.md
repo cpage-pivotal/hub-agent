@@ -6,44 +6,35 @@ compatibility: Requires Python 3 (stdlib only) and the tanzu-platform MCP server
 
 # Tanzu Platform Skill
 
-## IMPORTANT: Autonomous Execution
+DO NOT explore the environment, search for files, check env vars, or read config files. Everything you need is in this skill. Execute the steps below immediately.
 
-This skill is fully automated. All credentials are pre-configured as environment variables. You MUST execute every step yourself using your tools — never ask the user for a token, credentials, or manual steps. The user expects results, not instructions.
+## Step 1: Get a token
 
-## Workflow
-
-Progress:
-- [ ] Step 1: Run get-token.py to obtain a bearer token
-- [ ] Step 2: Call the matching MCP tool with the token
-- [ ] Step 3: Present formatted results to the user
-
-### Step 1: Get a token
-
-Your first action must be to run this command with the shell tool:
+Run this exact command — do not search for the script, it is already installed at this path:
 
 ```bash
 python3 .goose/skills/tanzu-hub/scripts/get-token.py
 ```
 
-This script uses pre-configured environment variables and prints a raw JWT token to stdout. Capture the output — that is your token. Pass the raw token string to MCP tools without any prefix (no "Bearer ", just the token itself).
+The script reads TANZU_HUB_URL, TANZU_HUB_USER, and TANZU_HUB_PASSWORD from environment variables (already configured) and prints a raw JWT token to stdout. Capture that token. Pass it to MCP tools as-is — no "Bearer " prefix.
 
-Tokens expire after 30 minutes. Get a fresh one if an MCP tool returns an authentication error.
+If a tool returns an auth error, re-run the script for a fresh token (tokens expire after 30 min).
 
-### Step 2: Pick the right tool call
+## Step 2: Call the right MCP tool
 
-Check if a `tanzu_common_queries` pattern matches the request:
+Match the user's request to a `tanzu_common_queries` pattern:
 
-| User Request | Pattern |
+| Request | Pattern |
 |---|---|
 | List foundations | `list_foundations` |
-| Find a foundation by name | `get_foundation_by_name` |
+| Find foundation by name | `get_foundation_by_name` |
 | List organizations | `list_organizations` |
-| List spaces / space overview | `list_spaces` or `spaces_summary` |
+| List spaces | `list_spaces` or `spaces_summary` |
 | List applications | `list_applications` |
 | Find stopped apps | `find_stopped_apps` |
 | Stopped apps per space | `count_stopped_apps_by_space` |
 | App state distribution | `summarize_app_states` |
-| Spaces with their apps | `spaces_with_apps` |
+| Spaces with apps | `spaces_with_apps` |
 | Service bindings | `list_service_bindings` |
 | Vulnerabilities | `find_vulnerabilities` |
 | Critical CVEs | `find_critical_cves` |
@@ -54,46 +45,37 @@ Check if a `tanzu_common_queries` pattern matches the request:
 | Spring apps | `list_spring_apps` |
 | App health | `get_app_health` |
 
-If a pattern matches, call it directly:
+Call it: `tanzu_common_queries(pattern: "list_foundations", token: "<token>")`
 
-```
-tanzu_common_queries(pattern: "list_foundations", token: "<token>")
-```
+If no pattern matches, build a custom query — see "Custom Queries" below.
 
-If no pattern matches, fall through to custom query construction (see below).
+## Step 3: Present results
 
-### Step 3: Present the results
-
-Format the response clearly for the user. For lists, use tables or bullet points.
+Format the response for the user. Use tables for lists, bullet points for details.
 
 ## Gotchas
 
-- Entity names are `entityName` at the entity level, NOT `properties.name` (that field does not exist).
-- Relationship navigation uses snake_case entity fields like `tanzu_tas_application`, NOT generic `contains`.
-- Prefer `count_stopped_apps_by_space` or `summarize_app_states` for aggregation questions — `spaces_with_apps` returns very large payloads.
-- If a tool call fails with an auth error, get a fresh token and retry.
+- Entity names are `entityName`, NOT `properties.name`.
+- Relationships use snake_case: `tanzu_tas_application`, not `contains`.
+- For aggregation, prefer `count_stopped_apps_by_space` or `summarize_app_states` over `spaces_with_apps`.
+- Auth errors → re-run get-token.py and retry.
 
-## Custom Query Construction
+## Custom Queries
 
-If no `tanzu_common_queries` pattern matches:
+When no common pattern matches:
 
-1. Read `reference/query-construction.md` for query syntax and naming conventions
-2. Read the relevant domain file for entity fields:
-   - TAS (foundations, orgs, spaces, apps): `domains/TAS.md`
-   - Spring Boot: `domains/Spring.md`
-   - Alerts/observability: `domains/Observability.md`
-   - Vulnerabilities/CVEs: `domains/Security.md`
-   - Capacity: `domains/Capacity.md`
-3. Validate with `tanzu_validate_query` before executing with `tanzu_graphql_query`
-4. If the API returns an error, read `troubleshooting/error-recovery.md`
+1. Read `reference/query-construction.md` for syntax
+2. Read the domain file: `domains/TAS.md`, `domains/Spring.md`, `domains/Observability.md`, `domains/Security.md`, or `domains/Capacity.md`
+3. Validate with `tanzu_validate_query`, then execute with `tanzu_graphql_query`
+4. On errors, read `troubleshooting/error-recovery.md`
 
-## Available MCP Tools
+## MCP Tools
 
 | Tool | Purpose |
 |------|---------|
-| `tanzu_common_queries` | Pre-built query patterns — try this first |
-| `tanzu_graphql_query` | Execute custom read queries |
-| `tanzu_validate_query` | Validate query syntax before execution |
-| `tanzu_graphql_mutate` | Create, update, or delete resources |
-| `tanzu_explore_schema` | Discover unknown types/fields |
-| `tanzu_find_entity_path` | Navigate unfamiliar entity relationships |
+| `tanzu_common_queries` | Pre-built patterns — try first |
+| `tanzu_graphql_query` | Custom read queries |
+| `tanzu_validate_query` | Validate before executing |
+| `tanzu_graphql_mutate` | Create/update/delete |
+| `tanzu_explore_schema` | Discover types and fields |
+| `tanzu_find_entity_path` | Find entity relationships |
