@@ -25,7 +25,7 @@ Your first action must be to run this command with the shell tool:
 python3 .goose/skills/tanzu-hub/scripts/get-token.py
 ```
 
-This script uses pre-configured environment variables and prints a bearer token to stdout. Capture the output — that is your token. If the script fails, check that TANZU_HUB_URL, TANZU_HUB_USER, and TANZU_HUB_PASSWORD are set.
+This script uses pre-configured environment variables and prints a raw JWT token to stdout. Capture the output — that is your token. Pass the raw token string to MCP tools without any prefix (no "Bearer ", just the token itself).
 
 Tokens expire after 30 minutes. Get a fresh one if an MCP tool returns an authentication error.
 
