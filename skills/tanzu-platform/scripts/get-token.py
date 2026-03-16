@@ -51,6 +51,8 @@ class _Redirect308Handler(urllib.request.HTTPRedirectHandler):
         return self.http_error_302(req, fp, code, msg, headers)
 
 
+_UA = "Mozilla/5.0 (compatible; TanzuHubCLI/1.0)"
+
 _cookie_jar = http.cookiejar.CookieJar()
 _opener = urllib.request.build_opener(
     urllib.request.HTTPCookieProcessor(_cookie_jar),
@@ -61,6 +63,7 @@ _opener = urllib.request.build_opener(
 def _get(url: str) -> urllib.request.Request:
     """Perform a GET and return the response (follows redirects, keeps cookies)."""
     req = urllib.request.Request(url)
+    req.add_header("User-Agent", _UA)
     return _opener.open(req)
 
 
@@ -69,6 +72,7 @@ def _post_form(url: str, data: dict) -> urllib.request.Request:
     encoded = urllib.parse.urlencode(data).encode()
     req = urllib.request.Request(url, data=encoded)
     req.add_header("Content-Type", "application/x-www-form-urlencoded")
+    req.add_header("User-Agent", _UA)
     return _opener.open(req)
 
 
