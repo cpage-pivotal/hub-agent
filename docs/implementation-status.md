@@ -110,7 +110,7 @@ entityQuery.typed.tanzu.TAS.Foundation
 ```bash
 # 1. Set environment
 export TANZU_PLATFORM_URL=https://tanzu-hub.kuhn-labs.com
-export TOKEN=your-bearer-token
+export TANZU_PLATFORM_FALLBACK_TOKEN=your-bearer-token  # for local dev without broker
 
 # 2. Build and run
 cd hub-mcp

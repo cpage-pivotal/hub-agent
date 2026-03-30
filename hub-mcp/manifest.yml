@@ -9,3 +9,5 @@ applications:
     env:
       JBP_CONFIG_OPEN_JDK_JRE: '{ jre: { version: 21.+ } }'
       TANZU_PLATFORM_URL: ((tanzu_platform_url))
+      BROKER_URL: ((broker_url))
+      BROKER_DELEGATION_TOKEN: ((broker_delegation_token))

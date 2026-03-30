@@ -74,10 +74,7 @@ public class TanzuQueryTool {
             String variables,
 
             @McpToolParam(description = "Named operation to execute if query contains multiple operations (optional)", required = false)
-            String operationName,
-
-            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
-            String token
+            String operationName
     ) {
         log.debug("Executing GraphQL query via MCP tool");
         
@@ -90,7 +87,7 @@ public class TanzuQueryTool {
                     .operationName(operationName)
                     .build();
 
-            GraphQLResponse response = graphQLService.executeQuery(request, token);
+            GraphQLResponse response = graphQLService.executeQuery(request);
             
             return formatResponse(response);
             

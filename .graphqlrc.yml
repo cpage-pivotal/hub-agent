@@ -5,5 +5,5 @@ extensions:
     default:
       url: ${TANZU_PLATFORM_URL}/hub/graphql
       headers:
-        Authorization: Bearer ${TOKEN}
+        Authorization: Bearer ${TANZU_PLATFORM_FALLBACK_TOKEN}
 

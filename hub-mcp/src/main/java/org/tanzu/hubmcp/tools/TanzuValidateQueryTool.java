@@ -62,18 +62,14 @@ public class TanzuValidateQueryTool {
             String variables,
             
             @McpToolParam(description = "Attempt to suggest corrections for errors (default: true)", required = false)
-            Boolean suggestFixes,
-
-            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
-            String token
+            Boolean suggestFixes
     ) {
         log.debug("Validating GraphQL query");
 
         try {
             boolean suggest = suggestFixes == null || suggestFixes;
 
-            // Perform validation
-            ValidationResult result = validate(query, suggest, token);
+            ValidationResult result = validate(query, suggest);
             
             return formatResult(result);
             
@@ -83,7 +79,7 @@ public class TanzuValidateQueryTool {
         }
     }
 
-    private ValidationResult validate(String query, boolean suggestFixes, String token) {
+    private ValidationResult validate(String query, boolean suggestFixes) {
         List<ValidationError> errors = new ArrayList<>();
         List<String> suggestions = new ArrayList<>();
         
@@ -132,7 +128,7 @@ public class TanzuValidateQueryTool {
         // Get schema for field/type validation
         SchemaCache schema = null;
         try {
-            schema = schemaService.getSchema(token);
+            schema = schemaService.getSchema();
         } catch (Exception e) {
             log.warn("Could not load schema for validation: {}", e.getMessage());
             // Continue without schema validation
@@ -151,7 +147,7 @@ public class TanzuValidateQueryTool {
                             .build());
                     
                     if (suggestFixes) {
-                        List<String> similar = schemaService.findSimilarTypes(typeName, token);
+                        List<String> similar = schemaService.findSimilarTypes(typeName);
                         if (!similar.isEmpty()) {
                             suggestions.add("Unknown type '" + typeName + "'. Did you mean: " + 
                                     String.join(", ", similar) + "?");
@@ -160,7 +156,6 @@ public class TanzuValidateQueryTool {
                 }
             }
             
-            // Look for entity type names in the query and validate them
             List<String> entityTypesInQuery = findEntityTypes(query);
             for (String typeName : entityTypesInQuery) {
                 if (schema.getType(typeName).isEmpty()) {
@@ -171,7 +166,7 @@ public class TanzuValidateQueryTool {
                             .build());
                     
                     if (suggestFixes) {
-                        List<String> similar = schemaService.findSimilarTypes(typeName, token);
+                        List<String> similar = schemaService.findSimilarTypes(typeName);
                         if (!similar.isEmpty()) {
                             suggestions.add("Unknown type '" + typeName + "'. Did you mean: " + 
                                     String.join(", ", similar) + "?");

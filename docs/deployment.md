@@ -13,7 +13,9 @@ This guide covers building, running, and deploying the Tanzu Platform MCP Server
 | Variable | Required | Description | Example |
 |----------|----------|-------------|---------|
 | `TANZU_PLATFORM_URL` | Yes | Tanzu Platform base URL | `https://tanzu-hub.kuhn-labs.com` |
-| `TOKEN` | Yes | Bearer token for authentication | `eyJ...` |
+| `BROKER_URL` | Production | Agent Credential Broker URL | `https://agent-credential-broker.apps.example.com` |
+| `BROKER_DELEGATION_TOKEN` | Production | Delegation JWT for the broker | `eyJ...` |
+| `TANZU_PLATFORM_FALLBACK_TOKEN` | Local dev | Static token when no broker is available | `eyJ...` |
 
 ## Building
 
@@ -52,7 +54,7 @@ cd hub-mcp
 
 # Set environment variables
 export TANZU_PLATFORM_URL=https://tanzu-hub.kuhn-labs.com
-export TOKEN=your-bearer-token
+export TANZU_PLATFORM_FALLBACK_TOKEN=your-bearer-token  # for local dev without broker
 
 # Run
 ./mvnw spring-boot:run
@@ -67,7 +69,7 @@ cd hub-mcp
 
 # Set environment variables and run
 export TANZU_PLATFORM_URL=https://tanzu-hub.kuhn-labs.com
-export TOKEN=your-bearer-token
+export TANZU_PLATFORM_FALLBACK_TOKEN=your-bearer-token
 java -jar target/hub-mcp-0.0.1-SNAPSHOT.jar
 ```
 
@@ -76,7 +78,7 @@ java -jar target/hub-mcp-0.0.1-SNAPSHOT.jar
 ```bash
 java -jar target/hub-mcp-0.0.1-SNAPSHOT.jar \
   --tanzu.platform.url=https://tanzu-hub.kuhn-labs.com \
-  --tanzu.platform.token=$TOKEN
+  --tanzu.platform.fallback-token=$TANZU_PLATFORM_FALLBACK_TOKEN
 ```
 
 ### Default Ports
@@ -191,10 +193,14 @@ applications:
   health-check-http-endpoint: /actuator/health
 ```
 
-### Create User-Provided Service for Credentials
+### Configure Credential Broker
+
+The hub-mcp server authenticates via the Agent Credential Broker. Set the broker URL and delegation token in the manifest or via `cf set-env`:
 
 ```bash
-cf create-user-provided-service tanzu-api-credentials -p '{"TOKEN":"your-bearer-token"}'
+cf set-env hub-mcp BROKER_URL https://agent-credential-broker.apps.example.com
+cf set-env hub-mcp BROKER_DELEGATION_TOKEN your-delegation-jwt
+cf restage hub-mcp
 ```
 
 ### Deploy
@@ -248,11 +254,13 @@ spec:
         env:
         - name: TANZU_PLATFORM_URL
           value: "https://tanzu-hub.kuhn-labs.com"
-        - name: TOKEN
+        - name: BROKER_URL
+          value: "https://agent-credential-broker.apps.example.com"
+        - name: BROKER_DELEGATION_TOKEN
           valueFrom:
             secretKeyRef:
               name: tanzu-credentials
-              key: token
+              key: broker-delegation-token
         livenessProbe:
           httpGet:
             path: /actuator/health/liveness
@@ -339,7 +347,10 @@ spring:
 tanzu:
   platform:
     url: ${TANZU_PLATFORM_URL:https://tanzu-hub.kuhn-labs.com}
-    token: ${TOKEN:}
+    fallback-token: ${TANZU_PLATFORM_FALLBACK_TOKEN:}
+    broker:
+      url: ${BROKER_URL:}
+      delegation-token: ${BROKER_DELEGATION_TOKEN:}
     graphql:
       endpoint: /hub/graphql
       timeout: 30s

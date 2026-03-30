@@ -13,7 +13,8 @@ import java.time.Duration;
 @Validated
 public record TanzuPlatformProperties(
         @NotBlank String url,
-        String token,
+        String fallbackToken,
+        BrokerProperties broker,
         GraphQLProperties graphql,
         CacheProperties cache
 ) {
@@ -25,6 +26,8 @@ public record TanzuPlatformProperties(
             cache = new CacheProperties(new SchemaProperties(Duration.ofHours(24), 100));
         }
     }
+
+    public record BrokerProperties(String url, String delegationToken) {}
 
     public record GraphQLProperties(
             String endpoint,

@@ -41,7 +41,8 @@ Domain knowledge for constructing effective GraphQL queries. Claude reads this s
 2. **Set environment variables:**
    ```bash
    export TANZU_PLATFORM_URL=https://tanzu-hub.kuhn-labs.com
-   export TOKEN=your-bearer-token
+   # For production: set BROKER_URL and BROKER_DELEGATION_TOKEN
+   # For local dev: set TANZU_PLATFORM_FALLBACK_TOKEN=your-bearer-token
    ```
 3. **Run the MCP server:**
    ```bash

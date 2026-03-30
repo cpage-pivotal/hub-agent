@@ -18,7 +18,10 @@ spring:
 tanzu:
   platform:
     url: ${TANZU_PLATFORM_URL:https://tanzu-hub.kuhn-labs.com}
-    token: ${TOKEN:}
+    fallback-token: ${TANZU_PLATFORM_FALLBACK_TOKEN:}
+    broker:
+      url: ${BROKER_URL:}
+      delegation-token: ${BROKER_DELEGATION_TOKEN:}
     graphql:
       endpoint: /hub/graphql
       timeout: 30s

@@ -209,7 +209,9 @@ The 1,382-type schema is too large to embed in tool descriptions:
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `TANZU_PLATFORM_URL` | Yes | Tanzu Platform base URL |
-| `TOKEN` | Yes | Bearer token for authentication |
+| `BROKER_URL` | Production | Agent Credential Broker URL |
+| `BROKER_DELEGATION_TOKEN` | Production | Delegation JWT for the broker |
+| `TANZU_PLATFORM_FALLBACK_TOKEN` | Local dev | Static token when no broker is available |
 
 ### Application Properties
 
@@ -217,7 +219,10 @@ The 1,382-type schema is too large to embed in tool descriptions:
 tanzu:
   platform:
     url: ${TANZU_PLATFORM_URL}
-    token: ${TOKEN}
+    fallback-token: ${TANZU_PLATFORM_FALLBACK_TOKEN:}
+    broker:
+      url: ${BROKER_URL:}
+      delegation-token: ${BROKER_DELEGATION_TOKEN:}
     graphql:
       endpoint: /hub/graphql
       timeout: 30s

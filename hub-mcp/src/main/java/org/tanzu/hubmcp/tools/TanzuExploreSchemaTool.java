@@ -72,10 +72,7 @@ public class TanzuExploreSchemaTool {
             Boolean showRelationships,
             
             @McpToolParam(description = "Highlight commonly-used fields. Default: false", required = false)
-            Boolean showCommonFields,
-
-            @McpToolParam(description = "Bearer token for Tanzu Platform API authentication. Obtain by running the bundled get-token.py script.")
-            String token
+            Boolean showCommonFields
     ) {
         log.debug("Exploring schema: typeName={}, search={}, domain={}, category={}", 
                 typeName, search, domain, category);
@@ -85,12 +82,11 @@ public class TanzuExploreSchemaTool {
             if (typeName != null && !typeName.isBlank()) {
                 return exploreSpecificType(typeName,
                         Boolean.TRUE.equals(showRelationships),
-                        Boolean.TRUE.equals(showCommonFields),
-                        token);
+                        Boolean.TRUE.equals(showCommonFields));
             }
 
             // Otherwise, search/filter types
-            List<TypeDefinition> types = schemaService.searchTypes(search, domain, category, token);
+            List<TypeDefinition> types = schemaService.searchTypes(search, domain, category);
             return formatTypeList(types, domain, search);
             
         } catch (Exception e) {
@@ -99,12 +95,11 @@ public class TanzuExploreSchemaTool {
         }
     }
 
-    private String exploreSpecificType(String typeName, boolean showRelationships, boolean showCommonFields, String token) {
-        Optional<TypeDefinition> typeOpt = schemaService.getTypeDetails(typeName, token);
+    private String exploreSpecificType(String typeName, boolean showRelationships, boolean showCommonFields) {
+        Optional<TypeDefinition> typeOpt = schemaService.getTypeDetails(typeName);
 
         if (typeOpt.isEmpty()) {
-            // Try to find similar types
-            List<String> similar = schemaService.findSimilarTypes(typeName, token);
+            List<String> similar = schemaService.findSimilarTypes(typeName);
             if (!similar.isEmpty()) {
                 return formatError("Type '" + typeName + "' not found. Did you mean: " + 
                         String.join(", ", similar) + "?");

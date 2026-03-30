@@ -1,26 +1,14 @@
 ---
 name: tanzu-platform
-description: "AUTONOMOUS skill for Tanzu Platform queries. ALWAYS load and follow this skill when the user mentions Tanzu, TAS, foundations, organizations, spaces, or applications. Credentials are pre-configured — run `python3 .goose/skills/tanzu-hub/scripts/get-token.py` to get a token, then call tanzu_common_queries with the token. NEVER ask the user for a token or credentials."
-compatibility: Requires Python 3 (stdlib only) and the tanzu-platform MCP server (hub). TANZU_HUB_URL, TANZU_HUB_USER, and TANZU_HUB_PASSWORD are pre-configured as environment variables.
+description: "AUTONOMOUS skill for Tanzu Platform queries. ALWAYS load and follow this skill when the user mentions Tanzu, TAS, foundations, organizations, spaces, or applications. Authentication is handled automatically by the MCP server — just call the tools directly. NEVER ask the user for a token or credentials."
+compatibility: Requires the tanzu-platform MCP server (hub-mcp). Authentication is managed by the Agent Credential Broker — no manual token handling needed.
 ---
 
 # Tanzu Platform Skill
 
-This skill is fully autonomous. Credentials are pre-configured as environment variables. DO NOT ask the user for tokens, credentials, or manual steps. DO NOT explore the environment, search for files, or read config. Execute the steps below immediately.
+This skill is fully autonomous. Authentication is handled automatically by the MCP server via the Agent Credential Broker. DO NOT ask the user for tokens, credentials, or manual steps. Just call the tools directly.
 
-## Step 1: Get a token
-
-Run this exact command — do not search for the script, it is already installed at this path:
-
-```bash
-python3 .goose/skills/tanzu-hub/scripts/get-token.py
-```
-
-The script reads TANZU_HUB_URL, TANZU_HUB_USER, and TANZU_HUB_PASSWORD from environment variables (already configured) and prints a raw JWT token to stdout. Capture that token. Pass it to MCP tools as-is — no "Bearer " prefix.
-
-If a tool returns an auth error, re-run the script for a fresh token (tokens expire after 30 min).
-
-## Step 2: Call the right MCP tool
+## Step 1: Call the right MCP tool
 
 Match the user's request to a `tanzu_common_queries` pattern:
 
@@ -45,11 +33,11 @@ Match the user's request to a `tanzu_common_queries` pattern:
 | Spring apps | `list_spring_apps` |
 | App health | `get_app_health` |
 
-Call it: `tanzu_common_queries(pattern: "list_foundations", token: "<token>")`
+Call it: `tanzu_common_queries(pattern: "list_foundations")`
 
 If no pattern matches, build a custom query — see "Custom Queries" below.
 
-## Step 3: Present results
+## Step 2: Present results
 
 Format the response for the user. Use tables for lists, bullet points for details.
 
@@ -58,7 +46,6 @@ Format the response for the user. Use tables for lists, bullet points for detail
 - Entity names are `entityName`, NOT `properties.name`.
 - Relationships use snake_case: `tanzu_tas_application`, not `contains`.
 - For aggregation, prefer `count_stopped_apps_by_space` or `summarize_app_states` over `spaces_with_apps`.
-- Auth errors → re-run get-token.py and retry.
 
 ## Custom Queries
 

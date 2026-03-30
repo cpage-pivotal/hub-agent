@@ -7,19 +7,21 @@ This guide walks you through testing the MCP server and skill locally before dep
 - Java 21+
 - Maven (or use the included `mvnw` wrapper)
 - Claude CLI (`claude`) or Claude Desktop
-- Access to Tanzu Platform (URL and bearer token)
+- Access to Tanzu Platform (URL and either a credential broker or fallback token)
 
 ## Environment Setup
 
 ### 1. Set Environment Variables
 
 ```bash
-# Required environment variables
+# Required
 export TANZU_PLATFORM_URL="https://tanzu-hub.kuhn-labs.com"
-export TOKEN="your-bearer-token-here"
+
+# For local dev (without credential broker):
+export TANZU_PLATFORM_FALLBACK_TOKEN="your-bearer-token-here"
 ```
 
-To get your token:
+To get a fallback token for local dev:
 1. Log into Tanzu Platform
 2. Open browser developer tools (F12)
 3. Go to Network tab
@@ -321,7 +323,8 @@ curl http://localhost:8080/actuator/metrics
 
 ### "401 Unauthorized" from API
 
-- Verify your `TOKEN` environment variable is set correctly
+- If using broker: verify the user has granted access to `tanzu-hub` in the broker UI
+- If using fallback token: verify `TANZU_PLATFORM_FALLBACK_TOKEN` is set and not expired
 - Tokens expire - get a fresh one if needed
 
 ### "Schema not loaded" Errors
@@ -343,11 +346,11 @@ Save this as `start-local-test.sh`:
 #!/bin/bash
 
 # Check for required environment variables
-if [ -z "$TANZU_PLATFORM_URL" ] || [ -z "$TOKEN" ]; then
-    echo "ERROR: TANZU_PLATFORM_URL and TOKEN must be set"
+if [ -z "$TANZU_PLATFORM_URL" ]; then
+    echo "ERROR: TANZU_PLATFORM_URL must be set"
     echo ""
     echo "export TANZU_PLATFORM_URL='https://tanzu-hub.kuhn-labs.com'"
-    echo "export TOKEN='your-token-here'"
+    echo "export TANZU_PLATFORM_FALLBACK_TOKEN='your-token-here'  # for local dev"
     exit 1
 fi
 

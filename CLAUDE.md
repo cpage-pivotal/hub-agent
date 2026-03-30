@@ -29,7 +29,11 @@ All commands run from the `hub-mcp/` directory:
 
 **Required environment variables:**
 - `TANZU_PLATFORM_URL` — Base URL of the Tanzu Platform instance
-- `TOKEN` — Raw JWT bearer token (no `Bearer ` prefix)
+- `BROKER_URL` — URL of the Agent Credential Broker (for production/CF deployment)
+- `BROKER_DELEGATION_TOKEN` — Delegation JWT for the broker
+
+**For local development (without broker):**
+- `TANZU_PLATFORM_FALLBACK_TOKEN` — Raw JWT bearer token (no `Bearer ` prefix)
 
 The server starts on port 8080. MCP endpoint: `http://localhost:8080/mcp`
 
@@ -53,6 +57,7 @@ Spring Boot 3.5.9 / Java 21 application using Spring AI MCP Server (WebMVC trans
 **Key services:**
 - `TanzuGraphQLService` — Query execution with 3-retry exponential backoff (5xx/timeouts only)
 - `SchemaIntrospectionService` — Schema fetching and caching
+- `CredentialBrokerService` — Fetches Tanzu Hub tokens from the Agent Credential Broker via mTLS; caches tokens with TTL-aware refresh
 
 **Caching (Caffeine, 24h TTL):**
 - `graphql-schema` — Full introspection result (~1,382 types)

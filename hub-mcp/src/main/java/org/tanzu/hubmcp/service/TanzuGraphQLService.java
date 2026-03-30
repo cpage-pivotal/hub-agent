@@ -27,13 +27,16 @@ public class TanzuGraphQLService {
 
     private final WebClient webClient;
     private final TanzuPlatformProperties properties;
+    private final CredentialBrokerService credentialBrokerService;
     private final Parser graphQLParser;
 
     public TanzuGraphQLService(
-            WebClient tanzuGraphQLClient, 
-            TanzuPlatformProperties properties) {
+            WebClient tanzuGraphQLClient,
+            TanzuPlatformProperties properties,
+            CredentialBrokerService credentialBrokerService) {
         this.webClient = tanzuGraphQLClient;
         this.properties = properties;
+        this.credentialBrokerService = credentialBrokerService;
         this.graphQLParser = new Parser();
     }
 
@@ -44,10 +47,10 @@ public class TanzuGraphQLService {
      * @return the GraphQL response
      * @throws GraphQLException if the query fails or returns errors
      */
-    public GraphQLResponse executeQuery(GraphQLRequest request, String token) {
+    public GraphQLResponse executeQuery(GraphQLRequest request) {
         log.debug("Executing GraphQL query: {}", truncateQuery(request.query()));
         validateQuery(request.query());
-        return executeGraphQLRequest(request, token);
+        return executeGraphQLRequest(request);
     }
 
     /**
@@ -57,10 +60,10 @@ public class TanzuGraphQLService {
      * @return the GraphQL response
      * @throws GraphQLException if the mutation fails or returns errors
      */
-    public GraphQLResponse executeMutation(GraphQLRequest request, String token) {
+    public GraphQLResponse executeMutation(GraphQLRequest request) {
         log.info("Executing GraphQL mutation: {}", truncateQuery(request.query()));
         validateMutation(request.query());
-        return executeGraphQLRequest(request, token);
+        return executeGraphQLRequest(request);
     }
 
     /**
@@ -68,7 +71,7 @@ public class TanzuGraphQLService {
      *
      * @return the raw introspection data
      */
-    public Map<String, Object> introspectSchema(String token) {
+    public Map<String, Object> introspectSchema() {
         log.info("Performing schema introspection");
         
         String introspectionQuery = """
@@ -165,12 +168,13 @@ public class TanzuGraphQLService {
                 .query(introspectionQuery)
                 .build();
 
-        GraphQLResponse response = executeGraphQLRequest(request, token);
+        GraphQLResponse response = executeGraphQLRequest(request);
         return response.data();
     }
 
-    private GraphQLResponse executeGraphQLRequest(GraphQLRequest request, String token) {
+    private GraphQLResponse executeGraphQLRequest(GraphQLRequest request) {
         try {
+            String token = credentialBrokerService.getToken();
             Duration timeout = properties.graphql().timeout();
             int maxRetries = properties.graphql().maxRetries();
             String endpoint = properties.graphql().endpoint();

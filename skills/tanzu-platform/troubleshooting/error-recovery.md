@@ -247,12 +247,12 @@ query(first: 10) { ... }
 }
 ```
 
-**Cause**: Missing or invalid bearer token.
+**Cause**: The MCP server could not obtain a valid token from the credential broker.
 
 **Fix**:
-1. Check `TOKEN` environment variable is set
-2. Verify token is not expired
-3. Ensure token has correct permissions
+1. Verify the credential broker is reachable and the delegation token is valid
+2. Ensure the user has granted access to the `tanzu-hub` target system in the broker UI
+3. Check that the hub-mcp app has valid CF instance identity certificates (for mTLS)
 
 ### Query Complexity Exceeded
 

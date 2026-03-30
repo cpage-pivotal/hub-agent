@@ -47,9 +47,9 @@ public class SchemaCacheRefreshTask {
         long startTime = System.currentTimeMillis();
         
         try {
-            schemaService.evictCaches();
+            schemaService.refreshSchema();
             long duration = System.currentTimeMillis() - startTime;
-            log.info("Schema cache evicted in {}ms; will reload on next tool call", duration);
+            log.info("Schema cache refreshed in {}ms", duration);
         } catch (Exception e) {
             log.error("Schema cache refresh failed: {}", e.getMessage(), e);
         }
@@ -63,7 +63,16 @@ public class SchemaCacheRefreshTask {
      */
     @Scheduled(initialDelay = 5000, fixedDelay = Long.MAX_VALUE)
     public void warmupCacheOnStartup() {
-        log.info("Schema cache warmup skipped — token is provided per tool call and cache will be populated on first request.");
+        log.info("Warming up schema cache on startup");
+        long startTime = System.currentTimeMillis();
+
+        try {
+            schemaService.getSchema();
+            long duration = System.currentTimeMillis() - startTime;
+            log.info("Schema cache warmed up in {}ms ({} types)", duration, schemaService.getSchema().getTypeCount());
+        } catch (Exception e) {
+            log.warn("Schema warmup failed — will retry on first tool call: {}", e.getMessage());
+        }
     }
 }
 

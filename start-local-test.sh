@@ -7,14 +7,15 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
 # Check for required environment variables
-if [ -z "$TANZU_PLATFORM_URL" ] || [ -z "$TOKEN" ]; then
+if [ -z "$TANZU_PLATFORM_URL" ]; then
     echo "╔══════════════════════════════════════════════════════════════════╗"
-    echo "║  ERROR: Required environment variables not set                   ║"
+    echo "║  ERROR: TANZU_PLATFORM_URL not set                              ║"
     echo "╠══════════════════════════════════════════════════════════════════╣"
-    echo "║  Please set the following variables:                             ║"
+    echo "║  export TANZU_PLATFORM_URL='https://tanzu-hub.kuhn-labs.com'    ║"
     echo "║                                                                  ║"
-    echo "║  export TANZU_PLATFORM_URL='https://tanzu-hub.kuhn-labs.com'     ║"
-    echo "║  export TOKEN='your-bearer-token-here'                           ║"
+    echo "║  For auth, set ONE of:                                           ║"
+    echo "║  - BROKER_URL + BROKER_DELEGATION_TOKEN (production)             ║"
+    echo "║  - TANZU_PLATFORM_FALLBACK_TOKEN (local dev)                     ║"
     echo "╚══════════════════════════════════════════════════════════════════╝"
     exit 1
 fi
@@ -24,7 +25,13 @@ echo "║  Tanzu Platform MCP Server - Local Testing                       ║"
 echo "╚══════════════════════════════════════════════════════════════════╝"
 echo ""
 echo "Platform URL: $TANZU_PLATFORM_URL"
-echo "Token: ${TOKEN:0:20}..."
+if [ -n "$BROKER_URL" ]; then
+    echo "Auth: Credential Broker at $BROKER_URL"
+elif [ -n "$TANZU_PLATFORM_FALLBACK_TOKEN" ]; then
+    echo "Auth: Fallback token (${TANZU_PLATFORM_FALLBACK_TOKEN:0:20}...)"
+else
+    echo "Auth: WARNING - no broker or fallback token configured"
+fi
 echo ""
 
 # Build if needed
