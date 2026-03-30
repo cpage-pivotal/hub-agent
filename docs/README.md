@@ -38,17 +38,29 @@ Domain knowledge for constructing effective GraphQL queries. Claude reads this s
 ## Getting Started
 
 1. **Read [Schema Learnings](schema-learnings.md)** - Critical knowledge about the API
-2. **Set environment variables:**
+2. **Obtain a refresh token** for the Agent Credential Broker:
+   ```bash
+   python3 get-refresh-token.py https://tanzu-hub.kuhn-labs.com
+   ```
+   Then paste the token into the broker UI under **Provide Refresh Token** for the `tanzu-hub` grant.
+3. **Set environment variables:**
    ```bash
    export TANZU_PLATFORM_URL=https://tanzu-hub.kuhn-labs.com
-   # For production: set BROKER_URL and BROKER_DELEGATION_TOKEN
-   # For local dev: set TANZU_PLATFORM_FALLBACK_TOKEN=your-bearer-token
+   export BROKER_URL=https://agent-credential-broker.apps.internal:8443
+   export BROKER_DELEGATION_TOKEN=<delegation-token-from-broker>
+   export BROKER_TARGET_SYSTEM=tanzu-hub
    ```
-3. **Run the MCP server:**
+4. **Run the MCP server:**
    ```bash
    cd hub-mcp
    ./mvnw spring-boot:run
    ```
+
+### Authentication
+
+In production (Cloud Foundry), `hub-mcp` authenticates with the [Agent Credential Broker](https://github.com/example/agent-credential-broker) via mTLS using CF workload identity certificates. The broker holds a refresh token for Tanzu Hub and returns short-lived access tokens on demand.
+
+The `get-refresh-token.py` script performs a headless PKCE login against Tanzu Hub's CSP gateway to obtain a refresh token. This is a one-time operation — the broker renews the token automatically thereafter.
 
 ## Critical Knowledge (TL;DR)
 
