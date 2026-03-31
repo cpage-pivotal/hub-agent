@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is a dual-component system providing a natural language interface to the **Tanzu Platform GraphQL API**:
 
-1. **`hub-mcp/`** — Java Spring Boot MCP server that executes GraphQL queries against Tanzu Platform
-2. **`skills/tanzu-platform/`** — Markdown skill documents teaching Claude domain knowledge for constructing correct GraphQL queries
+1. **`hub-mcp/`** — Java Spring Boot MCP server that constructs and executes GraphQL queries against Tanzu Platform
+2. **`skills/tanzu-platform/`** — Single `SKILL.md` mapping user intents to composable entity queries
 
 ## Build & Run Commands
 
@@ -43,16 +43,13 @@ The server starts on port 8080. MCP endpoint: `http://localhost:8080/mcp`
 
 Spring Boot 3.5.9 / Java 21 application using Spring AI MCP Server (WebMVC transport).
 
-**Six MCP tools exposed to Claude:**
+**Three MCP tools exposed to Claude:**
 
 | Tool | Method | Purpose |
 |------|--------|---------|
-| `tanzu_graphql_query` | `TanzuQueryTool` | Execute read queries |
+| `tanzu_entity_query` | `TanzuEntityQueryTool` | Composable entity queries with scope and filter |
+| `tanzu_graphql_query` | `TanzuQueryTool` | Raw GraphQL escape hatch (with inline validation) |
 | `tanzu_graphql_mutate` | `TanzuMutateTool` | Execute mutations |
-| `tanzu_explore_schema` | `TanzuExploreSchemaTool` | Explore schema with filtering |
-| `tanzu_find_entity_path` | `TanzuFindEntityPathTool` | BFS relationship navigation |
-| `tanzu_common_queries` | `TanzuCommonQueriesTool` | 15+ pre-built query patterns |
-| `tanzu_validate_query` | `TanzuValidateQueryTool` | Syntax validation |
 
 **Key services:**
 - `TanzuGraphQLService` — Query execution with 3-retry exponential backoff (5xx/timeouts only)
@@ -65,26 +62,22 @@ Spring Boot 3.5.9 / Java 21 application using Spring AI MCP Server (WebMVC trans
 - `type-definitions` — Individual type lookups
 - Schema warms up 5s after startup; daily refresh at 2 AM
 
-### Skill Documents (`skills/tanzu-platform/`)
+### Skill Document (`skills/tanzu-platform/`)
 
-Structured Markdown teaching Claude how to use the Tanzu Platform GraphQL API:
+Single `SKILL.md` file (~70 lines) that maps user intents to `tanzu_entity_query` calls:
 
-- `SKILL.md` — Entry point: tool mapping, quick reference
-- `domains/` — Entity documentation per domain (TAS, Spring, Observability, Security, Capacity)
-- `patterns/` — Query patterns and templates (common queries, filtering, pagination, mutations, entity navigation)
-- `reference/` — Entity hierarchy, naming conventions
-- `troubleshooting/` — Error recovery, anti-patterns, performance
+- Lists all entity types across TAS (23), Spring (4), and Platform (3) domains
+- Shows scoping patterns: `scope: {"foundation": "X"}` to narrow results
+- Documents common filter patterns: `filter: {"property": "state", "value": "STOPPED"}`
+- The LLM never writes GraphQL — the server constructs queries from composable parameters
 
-### Critical API Knowledge
+### Design Principles
 
-The Tanzu Platform GraphQL schema has 1,382 types. Key conventions Claude must follow when writing queries:
-
+- **Server owns query construction**: The MCP server constructs GraphQL internally from entity type + scope + filter
+- **Skill is a routing table**: Maps user intent to tool parameters, no GraphQL syntax
+- **Schema validation is server-side**: Property names are validated against the cached schema with helpful error messages
 - Entity names use `entityName` field (NOT `properties.name`)
 - Relationships use snake_case: `tanzu_tas_application` (NOT generic `contains`)
-- Query hierarchy: `entityQuery → typed → tanzu → {domain} → {entity} → query(...)`
-- For aggregations, prefer efficiency patterns (e.g. `count_stopped_apps_by_space`) over detail patterns
-
-See `docs/schema-learnings.md` for the full list of critical API knowledge.
 
 ## Package Structure
 

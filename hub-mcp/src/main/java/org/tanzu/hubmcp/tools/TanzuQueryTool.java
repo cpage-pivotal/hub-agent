@@ -33,12 +33,13 @@ public class TanzuQueryTool {
     @McpTool(name = "tanzu_graphql_query", description = """
             Execute read-only GraphQL queries against the Tanzu Platform API.
             
-            Use this tool to query Tanzu Platform data including:
-            - TAS foundations, organizations, spaces, and applications
-            - Spring Boot application metadata and dependencies
-            - Security vulnerabilities and CVEs
-            - Observability metrics and alerts
-            - Capacity information and recommendations
+            PREFER tanzu_entity_query for entity queries (foundations, orgs, spaces, apps).
+            Use this tool only for queries that tanzu_entity_query cannot handle, such as
+            complex multi-subsystem queries, non-entity subsystems (vulnerabilityQuery,
+            observabilityQuery, capacityQuery, statsQuery, etc.), or specialized aggregations.
+            
+            Validation is automatic -- syntax errors are caught before execution and
+            returned as actionable error messages.
             
             IMPORTANT: Queries must use the typed hierarchy: entityQuery -> typed -> tanzu -> {domain} -> {entity} -> query(...)
             Domains and entity types are lowercase (tas, foundation, application).
@@ -53,8 +54,9 @@ public class TanzuQueryTool {
                         query(first: 10) {
                           edges {
                             node {
-                              id
-                              properties { name }
+                              entityId
+                              entityName
+                              entityType
                             }
                           }
                           pageInfo { hasNextPage endCursor }
@@ -65,6 +67,9 @@ public class TanzuQueryTool {
                 }
               }
             }
+            
+            IMPORTANT: Use 'entityName' for the entity's name, NOT 'properties { name }'.
+            Use 'entityId' for the entity's ID.
             """)
     public String executeQuery(
             @McpToolParam(description = "GraphQL query string. Must be a valid GraphQL query.")

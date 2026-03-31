@@ -1,68 +1,61 @@
----
-name: tanzu-platform
-description: "AUTONOMOUS skill for Tanzu Platform queries. ALWAYS load and follow this skill when the user mentions Tanzu, TAS, foundations, organizations, spaces, or applications. Authentication is handled automatically by the MCP server — just call the tools directly. NEVER ask the user for a token or credentials."
-compatibility: Requires the tanzu-platform MCP server (hub-mcp). Authentication is managed by the Agent Credential Broker — no manual token handling needed.
----
-
 # Tanzu Platform Skill
 
-This skill is fully autonomous. Authentication is handled automatically by the MCP server via the Agent Credential Broker. DO NOT ask the user for tokens, credentials, or manual steps. Just call the tools directly.
+Query the Tanzu Platform to answer questions about TAS foundations, organizations, spaces, applications, services, Spring Boot apps, vulnerabilities, observability, and capacity.
 
-## Step 1: Call the right MCP tool
+## Entity Queries
 
-Match the user's request to a `tanzu_common_queries` pattern:
+Use `tanzu_entity_query` for any entity in the Tanzu Platform hierarchy.
 
-| Request | Pattern |
-|---|---|
-| List foundations | `list_foundations` |
-| Find foundation by name | `get_foundation_by_name` |
-| List organizations | `list_organizations` |
-| List spaces | `list_spaces` or `spaces_summary` |
-| List applications | `list_applications` |
-| Find stopped apps | `find_stopped_apps` |
-| Stopped apps per space | `count_stopped_apps_by_space` |
-| App state distribution | `summarize_app_states` |
-| Spaces with apps | `spaces_with_apps` |
-| Service bindings | `list_service_bindings` |
-| Vulnerabilities | `find_vulnerabilities` |
-| Critical CVEs | `find_critical_cves` |
-| Insights | `list_insights` |
-| Artifact SBOM | `get_artifact_sbom` |
-| Alerts | `list_alerts` |
-| Capacity | `check_capacity` |
-| Spring apps | `list_spring_apps` |
-| App health | `get_app_health` |
+### Entity types
 
-Call it: `tanzu_common_queries(pattern: "list_foundations")`
+| Domain | Types |
+|--------|-------|
+| tas (default) | foundation, organization, space, application, serviceinstance, boshdirector, boshvm, buildpack, deployment, domain, droplet, isolationsegment, opsmanager, organizationquota, processinstance, resource, revision, serviceoffering, serviceplan, stemcell, tile, vcenterconfig, vmtype |
+| spring | application (use domain: "spring"), instance, cloudgateway, appreplica |
+| platform | foundationgroup, organizationgroup, spacegroup |
 
-If no pattern matches, build a custom query — see "Custom Queries" below.
+### Scoping (narrow results to a parent entity)
 
-## Step 2: Present results
+Pass a `scope` JSON to scope queries to a parent entity. The server handles relationship navigation automatically.
 
-Format the response for the user. Use tables for lists, bullet points for details.
+- "List foundations" -> entityType: "foundation"
+- "Orgs in foundation X" -> entityType: "organization", scope: {"foundation": "X"}
+- "Spaces in org Y" -> entityType: "space", scope: {"organization": "Y"}
+- "Apps in space Z" -> entityType: "application", scope: {"space": "Z"}
+- "Apps in org Y on foundation X" -> entityType: "application", scope: {"foundation": "X", "organization": "Y"}
 
-## Gotchas
+### Common filters
 
-- Entity names are `entityName`, NOT `properties.name`.
-- Relationships use snake_case: `tanzu_tas_application`, not `contains`.
-- For aggregation, prefer `count_stopped_apps_by_space` or `summarize_app_states` over `spaces_with_apps`.
+Pass a `filter` JSON to filter by entity properties. The server validates property names and suggests corrections if wrong.
 
-## Custom Queries
+**Applications:**
+- "stopped apps" -> filter: {"property": "state", "value": "STOPPED"}
+- "running apps" -> filter: {"property": "state", "value": "STARTED"}
+- "Spring Boot apps" -> filter: {"property": "springApp", "value": true}
+- "apps with crashed instances" -> filter: {"property": "crashedInstanceCount", "operator": "GT", "value": 0}
+- "Java apps" -> filter: {"property": "buildpack", "operator": "CONTAINS", "value": "java"}
 
-When no common pattern matches:
+**Service instances:**
+- "upgradeable services" -> filter: {"property": "upgradeAvailable", "value": true}
 
-1. Read `reference/query-construction.md` for syntax
-2. Read the domain file: `domains/TAS.md`, `domains/Spring.md`, `domains/Observability.md`, `domains/Security.md`, or `domains/Capacity.md`
-3. Validate with `tanzu_validate_query`, then execute with `tanzu_graphql_query`
-4. On errors, read `troubleshooting/error-recovery.md`
+If unsure of the property name, try your best guess -- the server will suggest valid property names if wrong.
 
-## MCP Tools
+### Combining scope + filter
 
-| Tool | Purpose |
-|------|---------|
-| `tanzu_common_queries` | Pre-built patterns — try first |
-| `tanzu_graphql_query` | Custom read queries |
-| `tanzu_validate_query` | Validate before executing |
-| `tanzu_graphql_mutate` | Create/update/delete |
-| `tanzu_explore_schema` | Discover types and fields |
-| `tanzu_find_entity_path` | Find entity relationships |
+- "stopped apps in foundation X" -> entityType: "application", scope: {"foundation": "X"}, filter: {"property": "state", "value": "STOPPED"}
+
+### Include details
+
+- Pass include: "properties" for full entity properties
+- Default is "minimal" (entityName, entityId, entityType only)
+
+## Mutations
+
+Use `tanzu_graphql_mutate` for write operations. Always confirm destructive actions with the user first.
+
+## Raw GraphQL (fallback)
+
+If no tool above fits, use `tanzu_graphql_query` with raw GraphQL. Key rules:
+- Use `entityName` for names (NOT `properties.name`)
+- Use `entityQuery -> typed -> tanzu -> {domain} -> {entityType} -> query(...)`
+- Relationships use `relationshipsIn.isContainedIn.tanzu_tas_{entity}` (NOT `contains`)
